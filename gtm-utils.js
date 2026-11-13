@@ -65,7 +65,8 @@ function formatPrice(priceInDKK) {
 function formatProductForGA4(product, itemMetadata = {}) {
   const formatted = {
     item_id: String(product.id || product.productId || ''),
-    item_name: product.name || '',
+    // BRP product names can carry trailing spaces; GA4 gets them trimmed.
+    item_name: String(product.name || '').trim(),
     price: formatPrice(product.amount || product.price || 0),
     quantity: product.quantity || 1,
     item_category: product.type || 'membership', // membership, value-card, addon
@@ -73,6 +74,9 @@ function formatProductForGA4(product, itemMetadata = {}) {
 
   if (itemMetadata.item_category2) {
     formatted.item_category2 = itemMetadata.item_category2;
+  }
+  if (product.item_list_name) {
+    formatted.item_list_name = product.item_list_name;
   }
 
   return formatted;
@@ -129,6 +133,52 @@ function trackAddToCart(items = [], value = 0, currency = 'DKK') {
       items: formattedItems
     }
   });
+}
+
+/**
+ * Track remove_from_cart event (when items are removed from cart)
+ * GA4 Event: remove_from_cart
+ * @param {Array<object>} items - Array of removed items
+ * @param {number} value - Value of the removed items
+ * @param {string} currency - Currency code (default: 'DKK')
+ */
+function trackRemoveFromCart(items = [], value = 0, currency = 'DKK') {
+  if (!Array.isArray(items) || items.length === 0) {
+    gtmWarn('[GTM] remove_from_cart: Items array is required');
+    return;
+  }
+
+  const formattedItems = items.map(item => formatProductForGA4(item));
+
+  pushToDataLayer('remove_from_cart', {
+    ecommerce: {
+      currency: currency,
+      value: formatPrice(value),
+      items: formattedItems
+    }
+  });
+}
+
+/**
+ * Track view_item_list event (when a product list is shown)
+ * GA4 Event: view_item_list
+ * @param {Array<object>} items - Array of listed items
+ * @param {string} itemListName - The list name (e.g. 'Black Week')
+ * @param {string} itemListId - Optional: The list ID
+ */
+function trackViewItemList(items = [], itemListName = null, itemListId = null) {
+  if (!Array.isArray(items) || items.length === 0) {
+    gtmWarn('[GTM] view_item_list: Items array is required');
+    return;
+  }
+
+  const formattedItems = items.map(item => formatProductForGA4(item));
+
+  const ecommerce = { items: formattedItems };
+  if (itemListName) ecommerce.item_list_name = itemListName;
+  if (itemListId) ecommerce.item_list_id = itemListId;
+
+  pushToDataLayer('view_item_list', { ecommerce });
 }
 
 /**
@@ -208,6 +258,8 @@ if (typeof module !== 'undefined' && module.exports) {
     pushToDataLayer,
     trackSelectItem,
     trackAddToCart,
+    trackRemoveFromCart,
+    trackViewItemList,
     trackBeginCheckout,
     trackPurchase,
     formatProductForGA4,
@@ -220,6 +272,8 @@ window.GTM = {
   pushToDataLayer,
   trackSelectItem,
   trackAddToCart,
+  trackRemoveFromCart,
+  trackViewItemList,
   trackBeginCheckout,
   trackPurchase,
   formatProductForGA4,

@@ -816,6 +816,97 @@ body.bg-ready::before {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+#blackWeekHeaderBar[hidden] {
+    display: none !important;
+}
+
+.bw-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 10px 16px;
+    background: #011638;
+    border: 0;
+    border-bottom: 3px solid #ff00ff;
+    color: #fff;
+    text-align: left;
+    font-family: Inter, Helvetica, Arial, sans-serif;
+    cursor: default;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+button.bw-header-bar {
+    cursor: pointer;
+}
+
+.bw-header-bar b {
+    font-family: Anton, Impact, sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    flex: none;
+}
+
+.bw-header-bar i {
+    font-style: normal;
+    color: #ff00ff;
+}
+
+.bw-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-left: auto;
+}
+
+.bw-header-count {
+    font-size: 12px;
+    color: #c9d2e3;
+    text-align: right;
+    line-height: 1.35;
+}
+
+.bw-header-count em {
+    font-style: normal;
+    color: #fff;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.bw-header-cta {
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1.2;
+    white-space: nowrap;
+    border-bottom: 1px solid #ff00ff;
+}
+
+@media (max-width: 420px) {
+    .bw-header-bar {
+        padding: 8px 12px;
+        gap: 8px;
+    }
+
+    .bw-header-bar b {
+        font-size: 18px;
+    }
+
+    .bw-header-meta {
+        gap: 10px;
+    }
+
+    .bw-header-cta {
+        font-size: 13px;
+    }
+}
+
 .header-container {
     max-width: 1200px;
     margin: 0 auto;
@@ -1113,7 +1204,7 @@ body.bg-ready::before {
     }
     
     .step-indicator {
-        margin-top: 48px; /* Add space for fixed header on tablet */
+        margin-top: calc(48px + var(--bw-bar-height, 0px)); /* Add space for fixed header on tablet */
         margin-bottom: 0;
     }
     
@@ -1123,7 +1214,7 @@ body.bg-ready::before {
     }
     
     .selected-gym-display {
-        margin-top: calc(48px + 8px);
+        margin-top: calc(48px + 8px + var(--bw-bar-height, 0px));
         margin-bottom: 0; /* No bottom margin - step indicator handles spacing */
         padding: 0 16px;
     }
@@ -1228,7 +1319,7 @@ body.bg-ready::before {
     }
     
     .step-indicator {
-        margin-top: 44px; /* Add space for fixed header on mobile */
+        margin-top: calc(44px + var(--bw-bar-height, 0px)); /* Add space for fixed header on mobile */
         margin-bottom: 0;
     }
     
@@ -1238,7 +1329,7 @@ body.bg-ready::before {
     }
     
     .selected-gym-display {
-        margin-top: calc(44px + 4px);
+        margin-top: calc(44px + 4px + var(--bw-bar-height, 0px));
         margin-bottom: 0; /* No bottom margin - step indicator handles spacing */
         padding: 0 16px;
     }
@@ -1288,7 +1379,7 @@ body.bg-ready::before {
     background-color: transparent;
     padding: 4px 0; /* Reduced padding to prevent clipping of animated rings */
     overflow: visible; /* Ensure animations aren't clipped */
-    margin-top: 56px; /* Add space for fixed header */
+    margin-top: calc(56px + var(--bw-bar-height, 0px)); /* Add space for fixed header */
     margin-bottom: 0; /* Remove bottom margin */
 }
 
@@ -1333,7 +1424,7 @@ body.bg-ready::before {
     align-items: center;
     justify-content: center;
     gap: 0;
-    margin-top: calc(56px + 8px); /* Space for fixed header + small gap */
+    margin-top: calc(56px + 8px + var(--bw-bar-height, 0px)); /* Space for fixed header + small gap */
     margin-bottom: 0; /* No bottom margin - step indicator handles spacing */
     padding: 0;
     font-size: var(--font-size-sm);
@@ -2190,6 +2281,59 @@ body.bg-ready::before {
     }
 }
 
+/* —— Skeleton loading ——
+   Placeholders that hold a list's place while its data is on the way, so the
+   real content lands where the placeholders were. .skeleton is one shimmering
+   bar, sized in em so it follows the text it stands in for. The element around
+   it keeps its normal font size and line height, which is what makes a
+   placeholder the same height as the content that replaces it. */
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton {
+    display: inline-block;
+    height: 0.75em;
+    border-radius: 4px;
+    vertical-align: middle;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.17) 50%, rgba(255, 255, 255, 0.08) 100%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+.skeleton--xs { width: 4em; }
+.skeleton--sm { width: 7em; }
+.skeleton--md { width: 10em; }
+.skeleton--lg { width: 14em; }
+.skeleton--xl { width: 24em; max-width: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+        background: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* Gym list placeholder rows, shown until the first gym list renders. Same box
+   as .gym-item and the same inner classes, so a row is the height of the gym
+   that replaces it at every breakpoint. */
+.gym-skeleton {
+    background: var(--color-item-bg);
+    border: 2px solid var(--color-item-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+@media (max-width: 640px) {
+    .gym-skeleton {
+        padding: 14px 16px;
+    }
+}
+
 .no-results {
     text-align: center;
     padding: 40px 20px;
@@ -2504,8 +2648,1405 @@ html[data-landing-route] .category-item {
 
 html[data-landing-route="LandingFirstMonthFree"] .category-item[data-category="campaign"],
 html[data-landing-route="LandingFreeTrial"] .category-item[data-category="freetrial"],
-html[data-landing-route="LandingFirstClimb"] .category-item[data-category="firstclimb"] {
+html[data-landing-route="LandingFirstClimb"] .category-item[data-category="firstclimb"],
+html[data-landing-route="LandingBlackWeek"] .category-item[data-category="blackweek"] {
     display: block;
+}
+
+/* —— Black Week shop (mockup UI, scoped) —— */
+.bw-shop-host {
+    background: transparent !important;
+    border: none !important;
+    cursor: default !important;
+    overflow: visible !important;
+}
+
+.bw-shop-host .category-content,
+.bw-shop-host .category-content-inner,
+.bw-shop-host .plans-list {
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+html[data-landing-route="LandingBlackWeek"] .bw-shop-host {
+    display: block !important;
+}
+
+/* Exclusive BW storefront: hide the generic access-type chrome */
+html[data-landing-route="LandingBlackWeek"] #step-2 .main-subtitle,
+html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
+    display: none !important;
+}
+
+.bw-promo {
+    display: block;
+    background: #1d1f27;
+    border: 2px solid #ff00ff;
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin: 0 0 14px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    color: inherit;
+    font: inherit;
+}
+
+.bw-promo[hidden] {
+    display: none !important;
+}
+
+.bw-promo .bw-promo-kicker {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ff7aff;
+    font-weight: 700;
+    margin: 0 0 4px;
+}
+
+.bw-promo .bw-promo-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+}
+
+.bw-promo .bw-promo-sub {
+    margin: 4px 0 0;
+    color: #a9abb6;
+    font-size: 14px;
+}
+
+.bw-promo .bw-promo-cta {
+    display: inline-block;
+    margin-top: 10px;
+    color: #ff7aff;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.bw-shop {
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 0 0 120px;
+    color: #fff;
+    font: 15px/1.45 Inter, Helvetica, Arial, sans-serif;
+}
+
+.bw-shop .bw-banner {
+    background: #011638;
+    border-bottom: 3px solid #ff00ff;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0 0 4px;
+}
+
+.bw-shop .bw-banner b {
+    font-family: Anton, Impact, sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+}
+
+.bw-shop .bw-banner i {
+    font-style: normal;
+    color: #ff00ff;
+}
+
+.bw-shop .bw-banner span {
+    font-size: 12px;
+    color: #c9d2e3;
+    text-align: right;
+    line-height: 1.35;
+}
+
+.bw-shop .bw-banner em {
+    font-style: normal;
+    color: #fff;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.bw-shop .bw-wrap {
+    padding: 0 16px;
+}
+
+.bw-shop .bw-top {
+    text-align: center;
+    padding: 14px 0 6px;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.bw-shop .bw-top button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #ff00ff;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bw-shop .bw-lab {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #888;
+    margin: 22px 2px 10px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* A card is two columns by three rows, and the two wrapper divs dissolve into
+   the grid (display: contents) so the leaf elements pair up: the name and the
+   price on one baseline, the hint and the old price on the next, the pill and
+   the quantity control at the bottom. */
+.bw-shop .bw-choice {
+    width: 100%;
+    background: #232323;
+    border: 1.5px solid #333;
+    border-radius: 14px;
+    padding: 16px;
+    margin: 0 0 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 14px;
+    cursor: pointer;
+    text-align: left;
+    color: #fff;
+    font: inherit;
+    transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.bw-shop .bw-choice.on {
+    border-color: #ff00ff;
+    background: #2a1a2a;
+}
+
+.bw-shop .bw-choice:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.bw-shop .bw-radio {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid #555;
+    flex: none;
+    box-sizing: border-box;
+}
+
+.bw-shop .bw-choice.on .bw-radio {
+    border: 7px solid #ff00ff;
+}
+
+.bw-shop .bw-choice-main,
+.bw-shop .bw-choice-price {
+    display: contents;
+}
+
+.bw-shop .bw-choice-title {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: baseline;
+    min-width: 0;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.bw-shop .bw-choice-desc {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+    color: #999;
+    font-size: 13px;
+    margin-top: 2px;
+}
+
+.bw-shop .bw-choice-price b {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: baseline;
+    text-align: right;
+    white-space: nowrap;
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.bw-shop .bw-choice-price .bw-was {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+    white-space: nowrap;
+    color: #777;
+    font-size: 12px;
+    text-decoration: line-through;
+}
+
+.bw-shop .bw-choice .bw-pill,
+.bw-shop .bw-choice .skeleton--pill {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
+    align-self: center;
+}
+
+.bw-shop .bw-choice .bw-q {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: center;
+}
+
+.bw-shop .bw-pill {
+    display: inline-block;
+    background: #ff00ff;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 99px;
+    margin-top: 6px;
+}
+
+/* —— Quantity control ——
+   On the picker's cards and on the rows of the Black Week cart. Minus, number
+   and plus are always in the markup and data-qty on .bw-q is the state. At 0
+   the minus button and the number are folded away behind the plus button, so
+   adding the first card opens the control and removing the last one closes it. */
+.bw-q {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+/* On a picker card the control sits under the price. */
+.bw-shop .bw-q {
+    margin-top: 10px;
+}
+
+.bw-q button {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 50%;
+    border: 1.5px solid #555;
+    background: none;
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    font-family: inherit;
+    padding: 0;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.bw-q button:not(.dis):active {
+    transform: scale(0.92);
+}
+
+.bw-q button.plus {
+    background: #ff00ff;
+    border-color: #ff00ff;
+    /* Above the minus button and the number, which slide out from underneath it. */
+    position: relative;
+    z-index: 1;
+}
+
+/* At the cap. These are the colours of the plus button at 30% opacity over the
+   card, set as solid colours so the button still covers what is folded under it. */
+.bw-q button.plus.dis {
+    background: #651965;
+    border-color: #651965;
+    color: #656565;
+    cursor: default;
+}
+
+/* The number is a window over a column of digits, one digit per 18px line.
+   Sliding the column rolls the count: up when it rises, down when it falls. */
+.bw-q-num {
+    width: 34px;
+    height: 24px;
+    overflow: hidden;
+    text-align: center;
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 18px;
+    color: #fff;
+    /* Digits fade at the window's top and bottom edge as they roll through it. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 5px, #000 calc(100% - 5px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 5px, #000 calc(100% - 5px), transparent);
+}
+
+.bw-q .minus,
+.bw-q-num {
+    transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 180ms ease-out, visibility 220ms;
+}
+
+/* Closed: the minus button and the number are tucked behind the plus button,
+   the number half as far in as the minus button, so the control fans open
+   from the plus button and folds back into it. Closing is the quicker of the two. */
+.bw-q[data-qty="0"] .minus,
+.bw-q[data-qty="0"] .bw-q-num {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition-duration: 160ms, 120ms, 160ms;
+}
+
+.bw-q[data-qty="0"] .minus {
+    transform: translateX(70px);
+}
+
+.bw-q[data-qty="0"] .bw-q-num {
+    transform: translateX(35px);
+}
+
+.bw-q-digits {
+    display: block;
+    /* Centres an 18px line in the 24px window. */
+    padding-top: 3px;
+    transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bw-q-digits span {
+    display: block;
+}
+
+/* One line per card above the first, up to the larger cap (5 coffee cards).
+   At 0 the column stays on "1", so the digit holds still while the control closes. */
+.bw-q[data-qty="2"] .bw-q-digits { transform: translateY(-18px); }
+.bw-q[data-qty="3"] .bw-q-digits { transform: translateY(-36px); }
+.bw-q[data-qty="4"] .bw-q-digits { transform: translateY(-54px); }
+.bw-q[data-qty="5"] .bw-q-digits { transform: translateY(-72px); }
+
+/* Reduced motion: the control fades open and closed, and the count changes at once. */
+@media (prefers-reduced-motion: reduce) {
+    .bw-q button {
+        transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+
+    .bw-q .minus,
+    .bw-q-num,
+    .bw-q[data-qty="0"] .minus,
+    .bw-q[data-qty="0"] .bw-q-num {
+        transform: none;
+        transition: opacity 160ms ease, visibility 160ms;
+    }
+
+    .bw-q-digits {
+        transition: none;
+    }
+}
+
+.bw-shop .bw-note {
+    font-size: 12px;
+    color: #ff7aff;
+    margin: -2px 2px 8px;
+}
+
+.bw-shop .bw-add {
+    background: #232323;
+    border: 1.5px dashed #555;
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.bw-shop .bw-add-ic {
+    font-size: 22px;
+    line-height: 1;
+}
+
+.bw-shop .bw-add-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.bw-shop .bw-add-title {
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.bw-shop .bw-add-desc {
+    font-size: 13px;
+    color: #999;
+    margin-top: 2px;
+}
+
+.bw-shop .bw-add-desc b {
+    color: #fff;
+}
+
+.bw-shop .bw-add > button {
+    background: none;
+    border: 1.5px solid #ff00ff;
+    color: #ff00ff;
+    border-radius: 99px;
+    padding: 9px 14px;
+    font-weight: 700;
+    font-size: 14px;
+    font-family: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.bw-shop .bw-sum {
+    background: #232323;
+    border-radius: 14px;
+    padding: 6px 16px;
+}
+
+.bw-shop .bw-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #333;
+    font-size: 15px;
+}
+
+.bw-shop .bw-row:last-child {
+    border-bottom: 0;
+}
+
+.bw-shop .bw-row span {
+    color: #bbb;
+}
+
+.bw-shop .bw-row.bw-save {
+    background: transparent;
+    color: #ff7aff;
+}
+
+.bw-shop .bw-row.bw-save span,
+.bw-shop .bw-row.bw-save b {
+    color: #ff7aff;
+    font-weight: 600;
+}
+
+.bw-shop .bw-row.bw-total b {
+    font-size: 18px;
+}
+
+.bw-shop .bw-row.bw-total span {
+    color: #fff;
+    font-weight: 700;
+}
+
+.bw-shop .bw-kicker {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ff7aff;
+    font-weight: 700;
+}
+
+/* One header per card kind. The punch header opens the shop and the coffee
+   header starts its section further down. */
+.bw-shop .bw-title {
+    text-align: center;
+    font-size: 26px;
+    line-height: 1.15;
+    margin: 14px 0 4px;
+    color: #fff;
+    font-weight: 700;
+}
+
+.bw-shop .bw-title--coffee {
+    margin-top: 34px;
+}
+
+/* The label row sits closer to its header than its default 22px. */
+.bw-shop .bw-title + .bw-lab {
+    margin-top: 10px;
+}
+
+.bw-shop .bw-section {
+    margin: 0 0 22px;
+}
+
+.bw-shop .bw-section-kicker {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ff7aff;
+    font-weight: 700;
+}
+
+.bw-shop .bw-section h3 {
+    margin: 2px 0 10px;
+    font-size: 22px;
+    line-height: 1.15;
+    color: #fff;
+}
+
+.bw-shop .bw-tickets {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bw-shop .bw-ticket {
+    display: grid;
+    grid-template-columns: 1fr 84px;
+    background: #f6feaa;
+    color: #17181d;
+    border-radius: 16px;
+    overflow: hidden;
+    min-height: 132px;
+}
+
+.bw-shop .bw-ticket.is-in {
+    box-shadow: 0 0 0 2px #ff00ff;
+}
+
+.bw-shop .bw-ticket-main {
+    padding: 12px 12px 12px 14px;
+    text-align: left;
+}
+
+.bw-shop .bw-ticket-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.bw-shop .bw-ticket-kicker {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 800;
+}
+
+.bw-shop .bw-ticket-was {
+    color: rgba(23, 24, 29, 0.45);
+    text-decoration: line-through;
+    font-size: 13px;
+}
+
+.bw-shop .bw-ticket-hint {
+    color: rgba(23, 24, 29, 0.62);
+    font-size: 13px;
+    margin-top: 1px;
+}
+
+.bw-shop .bw-ticket-price {
+    font-size: 32px;
+    line-height: 1.05;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 4px 0 2px;
+}
+
+.bw-shop .bw-ticket-eq {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.bw-shop .bw-ticket-eq em {
+    font-style: normal;
+    color: #c400c4;
+}
+
+.bw-shop .bw-ticket-eq b {
+    border-bottom: 2px solid #17181d;
+}
+
+.bw-shop .bw-ticket-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #c400c4;
+    font-weight: 700;
+}
+
+.bw-shop .bw-stub {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    height: 100%;
+    min-height: 132px;
+    padding: 8px 4px;
+    border: none;
+    border-left: 2px dashed rgba(23, 24, 29, 0.35);
+    background: #ff00ff;
+    color: #17181d;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.bw-shop .bw-stub span {
+    font-size: 18px;
+    letter-spacing: 0;
+}
+
+.bw-shop .bw-stub.is-in {
+    gap: 0;
+}
+
+.bw-shop .bw-stub.is-in button {
+    width: 100%;
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: #17181d;
+    font-size: 22px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.bw-shop .bw-stub.is-in b {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.bw-shop .bw-stub:disabled,
+.bw-shop .bw-stub.is-in button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.bw-shop .bw-offers {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.bw-shop .bw-card {
+    background: #1d1f27;
+    border: 2px solid #3a3c46;
+    border-radius: 14px;
+    padding: 18px;
+    margin: 0;
+}
+
+.bw-shop .bw-card.on {
+    border-color: #ff00ff;
+}
+
+.bw-shop .bw-offer-kicker {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ff7aff;
+    font-weight: 700;
+}
+
+.bw-shop .bw-offer-title {
+    margin: 4px 0 12px;
+    font-size: 22px;
+    line-height: 1.15;
+    color: #fff;
+}
+
+.bw-shop .bw-offer-copy {
+    margin: -6px 0 12px;
+    color: #a9abb6;
+}
+
+.bw-upsell {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    background: rgba(10, 10, 14, 0.72);
+    display: grid;
+    place-items: center;
+    padding: 20px;
+}
+
+.bw-upsell[hidden] {
+    display: none !important;
+}
+
+.bw-upsell-card {
+    width: min(420px, 100%);
+    background: #1d1f27;
+    border: 2px solid #ff00ff;
+    border-radius: 16px;
+    padding: 22px 20px 18px;
+    color: #e9e9ee;
+}
+
+.bw-upsell-card h3 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    color: #fff;
+}
+
+.bw-upsell-card p {
+    margin: 0 0 18px;
+    color: #c9cad3;
+}
+
+.bw-upsell-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bw-upsell-primary,
+.bw-upsell-secondary {
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.bw-upsell-primary {
+    background: #ff00ff;
+    color: #14151a;
+    border: none;
+}
+
+.bw-upsell-secondary {
+    background: transparent;
+    color: #e9e9ee;
+    border: 1px solid #3a3c46;
+}
+
+.bw-shop .bw-seg {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    background: #14151a;
+    border-radius: 10px;
+    padding: 4px;
+    margin: 0 0 16px;
+}
+
+.bw-shop .bw-seg button {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 10px 4px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #c9cad3;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.bw-shop .bw-seg button small {
+    display: block;
+    font-weight: 400;
+    font-size: 11.5px;
+    color: #8e909b;
+}
+
+.bw-shop .bw-seg button.on {
+    background: #ff00ff;
+    color: #14151a;
+}
+
+.bw-shop .bw-seg button.on small {
+    color: #3a0a3a;
+}
+
+.bw-shop .bw-seg button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.bw-shop .bw-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.bw-shop .bw-price {
+    font-size: 38px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.01em;
+}
+
+.bw-shop .bw-was {
+    color: #8e909b;
+    text-decoration: line-through;
+    text-decoration-color: #ff00ff;
+}
+
+.bw-shop .bw-save {
+    background: #f6feaa;
+    color: #14151a;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 3px 8px;
+    border-radius: 6px;
+}
+
+.bw-shop .bw-math {
+    margin: 6px 0 14px;
+    color: #c9cad3;
+}
+
+.bw-shop .bw-math em {
+    font-style: normal;
+    color: #ff7aff;
+    font-weight: 700;
+}
+
+.bw-shop .bw-perks {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+}
+
+.bw-shop .bw-perks li {
+    padding: 3px 0 3px 24px;
+    position: relative;
+    color: #c9cad3;
+}
+
+.bw-shop .bw-perks li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #ff7aff;
+    font-weight: 700;
+}
+
+.bw-shop .bw-qty {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid #2b2d35;
+    padding-top: 14px;
+    gap: 12px;
+}
+
+.bw-shop .bw-qty-label b {
+    display: block;
+    color: #fff;
+}
+
+.bw-shop .bw-muted {
+    color: #8e909b;
+    font-size: 13px;
+}
+
+.bw-shop .bw-stepper {
+    display: flex;
+    align-items: center;
+    border: 1px solid #3a3c46;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.bw-shop .bw-stepper button {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    color: #fff;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.bw-shop .bw-stepper button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.bw-shop .bw-stepper b {
+    width: 36px;
+    text-align: center;
+    color: #fff;
+}
+
+.bw-shop .bw-add {
+    margin-top: 14px;
+    background: #1d1f27;
+    border: 1px dashed #4a4c58;
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    width: 100%;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.bw-shop .bw-add.on {
+    border-style: solid;
+    border-color: #ff00ff;
+}
+
+.bw-shop .bw-add .bw-add-copy {
+    flex: 1;
+}
+
+.bw-shop .bw-add .bw-add-copy b {
+    display: block;
+    color: #fff;
+}
+
+.bw-shop .bw-add .bw-add-copy span {
+    color: #a9abb6;
+    font-size: 13px;
+}
+
+.bw-shop .bw-add .bw-add-price {
+    text-align: right;
+}
+
+.bw-shop .bw-add .bw-add-price b {
+    display: block;
+    font-size: 18px;
+    color: #fff;
+}
+
+.bw-shop .bw-add .bw-add-price s {
+    color: #8e909b;
+    font-size: 12px;
+    text-decoration-color: #ff00ff;
+}
+
+.bw-shop .bw-add .bw-plus {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: #2b2d35;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.bw-shop .bw-add.on .bw-plus {
+    background: #ff00ff;
+    color: #14151a;
+}
+
+.bw-shop .bw-other {
+    margin-top: 22px;
+    color: #8e909b;
+    font-size: 13px;
+    text-align: center;
+}
+
+.bw-shop .bw-other button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #c9cad3;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+}
+
+/* Loading state of the card picker: the shop's own markup with .skeleton bars
+   where the copy goes, so each card is already the size the real one will be. */
+.bw-shop--loading .bw-choice {
+    cursor: default;
+}
+
+.bw-shop--loading .skeleton--pill {
+    display: block;
+    width: 78px;
+    height: 22px;
+    margin-top: 6px;
+    border-radius: 99px;
+}
+
+.bw-shop--loading .skeleton--round {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+}
+
+.bw-shop-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    background: #1b1c22;
+    border-top: 1px solid #2b2d35;
+    padding: 12px 16px 20px;
+}
+
+.bw-shop-bar .bw-shop-bar-in {
+    max-width: 440px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.bw-shop-bar .bw-tot {
+    flex: 1;
+}
+
+.bw-shop-bar .bw-tot b {
+    display: block;
+    font-size: 20px;
+    color: #fff;
+}
+
+.bw-shop-bar .bw-tot span {
+    font-size: 12px;
+    color: #a9abb6;
+}
+
+.bw-shop-bar .bw-cta {
+    background: #ff00ff;
+    color: #14151a;
+    font-weight: 800;
+    padding: 15px 22px;
+    border-radius: 12px;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+}
+
+.bw-shop-bar .bw-cta:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+    html[data-landing-route="LandingBlackWeek"] .cart-sidebar,
+    body.blackweek-flow .cart-sidebar {
+        display: none !important;
+    }
+}
+
+body.blackweek-flow .create-address-fields,
+body.blackweek-flow .create-optional-consent {
+    display: none;
+}
+
+/* —— Black Week cart ——
+   The cart on the Black Week checkout. It lists every Black Week card, in the
+   cart or not: the picker's name and the line total, and under them the unit
+   price and the picker's quantity control (.bw-q), which adds the card, removes
+   it and changes how many. Under the rows come the total, the saving and the
+   pickup gym, and the note about the payment provider sits under the pay
+   button. app.js writes the rows (renderBlackWeekCartRows) and the texts
+   (applyBlackWeekCartUi). */
+
+/* Discount codes are not for Black Week cards, and the regular note above the
+   pay button is replaced by the one under it. */
+body.blackweek-flow .discount-section,
+body.blackweek-flow .payment-redirect-note {
+    display: none;
+}
+
+/* One button: "Gå til betaling" saves the profile as part of the payment click
+   (handleCheckout), so the create form's own button goes away. Its message area
+   stays — save errors and the duplicate-email login land there. */
+body.blackweek-flow .save-account-btn {
+    display: none;
+}
+
+body.blackweek-flow .summary-header {
+    margin-bottom: 24px;
+}
+
+/* Edit button: the pencil plus a text label. */
+body.blackweek-flow .summary-edit-btn {
+    position: relative;
+    width: auto;
+    gap: 8px;
+    padding: 0 14px 0 12px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+/* 36px tall to the eye, 44px to the finger. */
+body.blackweek-flow .summary-edit-btn::after {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+}
+
+body.blackweek-flow .cart-items {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* A row is two by two: the name and the line total, and under them the unit
+   price and the quantity control. The control is as wide at quantity 0 as at
+   any other and is the widest thing on the right, so the name has the same
+   room, and the row the same height, whether the card is in the cart or not.
+   Nothing moves under the finger when a quantity changes. */
+body.blackweek-flow .cart-item--bw {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 0;
+}
+
+body.blackweek-flow .cart-item-title,
+body.blackweek-flow .cart-item-total {
+    align-self: baseline;
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: #fff;
+}
+
+body.blackweek-flow .cart-item-title {
+    transition: color 180ms ease;
+}
+
+body.blackweek-flow .cart-item-total {
+    text-align: right;
+    white-space: nowrap;
+}
+
+body.blackweek-flow .cart-item-meta {
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+/* The coffee add-on line, shown when no coffee card is in the cart: the offer
+   and its price on the left, the old price struck through, and a "+ Tilføj"
+   ring button on the right that puts the card in the cart. */
+body.blackweek-flow .cart-item--bw-upsell .cart-item-title {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+body.blackweek-flow .cart-item--bw-upsell .cart-item-meta {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+body.blackweek-flow .cart-item--bw-upsell .cart-item-meta b {
+    font-weight: 700;
+    color: #fff;
+}
+
+body.blackweek-flow .bw-upsell-was {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+body.blackweek-flow .bw-upsell-add {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    align-self: center;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1.5px solid #ff00ff;
+    background: none;
+    color: #ff7aff;
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+body.blackweek-flow .bw-upsell-add:active {
+    transform: scale(0.95);
+}
+
+/* The cart in one line above the profile form, phones only: the full cart is
+   below the form, this is the glance and the way back ("Ret"). */
+.bw-mini-summary {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    body.blackweek-flow .bw-mini-summary:not([hidden]) {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        margin: 4px 0 16px;
+        padding: 12px 16px;
+        background: #232323;
+        border: 1.5px solid #333;
+        border-radius: 12px;
+        color: #fff;
+        font: inherit;
+        font-size: var(--font-size-sm);
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    body.blackweek-flow .bw-mini-summary .bw-mini-edit {
+        color: #ff7aff;
+        text-decoration: underline;
+        white-space: nowrap;
+    }
+}
+
+/* Shown under the last card of a kind once its limit is reached, which is when
+   the plus buttons of that kind go off. It sits closer to its cards than the
+   next row does. */
+body.blackweek-flow .cart-item-limit {
+    margin: -10px 0 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.65);
+    hyphens: manual;
+}
+
+/* While the order is on its way to payment the cart is fixed, and its quantity
+   controls show it. app.js ignores them for that time (adjustBlackWeekProductQty). */
+body.blackweek-flow .order-summary:has(.checkout-btn.loading) .cart-items .bw-q {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* The info icon follows the name and wraps together with its last word. */
+body.blackweek-flow .cart-item-title-tail {
+    white-space: nowrap;
+}
+
+/* The tooltip is a child of the wrapper, so the wrapper hands it the text style
+   it has in the regular cart. */
+body.blackweek-flow .cart-item-title .product-info-wrapper {
+    margin-left: 6px;
+    vertical-align: -2px;
+    font-weight: 500;
+    white-space: normal;
+}
+
+/* The icon is 14px, so the finger gets a larger target around it. */
+body.blackweek-flow .cart-item-title .product-info-icon {
+    position: relative;
+}
+
+body.blackweek-flow .cart-item-title .product-info-icon::after {
+    content: '';
+    position: absolute;
+    inset: -13px;
+}
+
+body.blackweek-flow .payment-overview {
+    margin: 24px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* .payment-label is also the style of the old payment method rows, which is
+   where the pointer cursor comes from. A total is plain text. */
+body.blackweek-flow .payment-overview-paynow .payment-label {
+    font-weight: 700;
+    cursor: default;
+}
+
+body.blackweek-flow .payment-overview-paynow .payment-amount {
+    font-size: var(--font-size-lg);
+    font-weight: 800;
+}
+
+/* Label and amount share one baseline at every width. On narrow screens the
+   regular total row is a two-row grid, with room for a period under the label. */
+body.blackweek-flow #step-4 .payment-overview-paynow .payment-overview-paynow-row {
+    display: flex;
+    align-items: baseline;
+}
+
+body.blackweek-flow #step-4 .payment-overview-paynow .payment-paynow-amount-stack {
+    align-self: baseline;
+    margin-left: auto;
+}
+
+body.blackweek-flow .bw-cart-saving {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: #ff7aff;
+}
+
+body.blackweek-flow .bw-cart-saving[hidden] {
+    display: none;
+}
+
+body.blackweek-flow .bw-cart-pickup,
+body.blackweek-flow .bw-cart-note {
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.65);
+    hyphens: manual;
+}
+
+body.blackweek-flow .bw-cart-pickup {
+    margin: 14px 0 0;
+}
+
+body.blackweek-flow .bw-cart-pickup b {
+    font-weight: 600;
+    color: #fff;
+}
+
+/* The dot and the link wrap as one when the line is too long for the screen. */
+body.blackweek-flow .bw-cart-pickup-change {
+    white-space: nowrap;
+}
+
+/* A text link. The padding, taken back by the margin, widens the tap area
+   without moving the text around it. */
+body.blackweek-flow .bw-cart-pickup button {
+    margin: -12px -8px;
+    padding: 12px 8px;
+    border: none;
+    background: none;
+    font: inherit;
+    color: #ff7aff;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+body.blackweek-flow .consents-section {
+    margin: 24px 0;
+}
+
+body.blackweek-flow .bw-cart-note {
+    margin: 12px 0 0;
+    text-align: center;
 }
 
 .category-item {
@@ -2533,6 +4074,10 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     background: linear-gradient(to bottom, transparent, rgba(34, 30, 30, 0.646));
     pointer-events: none;
     z-index: 1;
+}
+
+.category-item.bw-shop-host.expanded::after {
+    display: none;
 }
 
 /* Campaign category - match other categories but with green border stroke and glow.
@@ -9700,11 +11245,6 @@ main {
     margin: 0 0.35em;
 }
 
-@keyframes confirmation-skeleton-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
 .confirmation-skeleton {
     display: inline-block;
     height: 1em;
@@ -9712,7 +11252,7 @@ main {
     vertical-align: middle;
     background: linear-gradient(90deg, #2c2c31 0%, #3a3a40 50%, #2c2c31 100%);
     background-size: 200% 100%;
-    animation: confirmation-skeleton-shimmer 1.4s linear infinite;
+    animation: skeleton-shimmer 1.4s linear infinite;
 }
 
 .confirmation-skeleton--sm { width: 64px; }

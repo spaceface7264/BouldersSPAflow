@@ -8,3 +8,7 @@
 # Redirect /hero to /hero/ so hero landing page loads
 /hero    /hero/    302
 /firstmonthfree    /firstmonthfree/    302
+
+# Black Week landing (same trailing-slash + 200 rewrite pattern as reset-password)
+/black-week    /black-week/   308
+/black-week/   /index.html    200

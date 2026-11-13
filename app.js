@@ -45,7 +45,7 @@ import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
 import { getErrorMessage, extractErrorFields } from './utils/errors.js';
 import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
-import { highlightFieldError } from './utils/dom.js';
+import { highlightFieldError, patchChildren } from './utils/dom.js';
 import { getApiConfig } from './utils/apiConfig.js';
 import {
   calculateGymDistances,
@@ -268,7 +268,10 @@ function updatePunchCardPaymentOverview() {
   applyPaymentOverviewDiscountRows(payNowBreakdown);
 
   if (DOM.payNow) {
-    DOM.payNow.textContent = formatCurrencyHalfKrone(payNowAmount);
+    // The Black Week cart prints its total the way the picker prints prices.
+    DOM.payNow.textContent = isBlackWeekCart()
+      ? formatBlackWeekKr(payNowAmount)
+      : formatCurrencyHalfKrone(payNowAmount);
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
     const periodElement = payNowRow?.querySelector('.payment-label-period');
     if (periodElement) periodElement.textContent = '';
@@ -532,11 +535,17 @@ const LANDING_ROUTE_CONFIG = Object.freeze({
     labelKey: 'firstclimb',
     mode: 'single',
   }),
+  '/black-week': Object.freeze({
+    componentName: 'LandingBlackWeek',
+    labelKey: 'blackweek',
+    mode: 'multi',
+  }),
 });
 const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
   '/99kr',
+  '/black-week',
   '/fitness',
   '/single-gym',
   '/singlegym',
@@ -545,6 +554,337 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/reset-password',
   '/resetpassword',
 ]));
+
+// Black Week 2026 (Europe/Copenhagen). Nov is CET (UTC+1) after DST ends.
+// Which section a value card belongs to is decided only by these labels.
+// BRP currently uses the singular punch label; the plural form is accepted too.
+const BLACK_WEEK_PUNCH_LABELS = Object.freeze(['blackweekpunchcard', 'blackweekpunchcards']);
+const BLACK_WEEK_COFFEE_LABELS = Object.freeze(['blackweekcoffee']);
+// Known punch numbers only pick the age-band copy (Voksen / Ung / Junior).
+// The quantity control slides its number with one CSS rule per quantity, up to
+// 5 (.bw-q-digits in styles.css). A cap above 5 needs more rules there.
+const BLACK_WEEK_PUNCH_CAP = 3;
+const BLACK_WEEK_COFFEE_CAP = 5;
+const BLACK_WEEK_START_MS = Date.parse('2026-11-22T23:00:00.000Z'); // Mon 23 Nov 00:00 CET
+const BLACK_WEEK_END_MS = Date.parse('2026-11-29T22:59:59.999Z'); // Sun 29 Nov 23:59:59.999 CET
+
+function getBlackWeekForceOverride() {
+  try {
+    const value = new URLSearchParams(window.location.search).get('forceBlackWeek');
+    // Persist for this browser tab so / ↔ /black-week testing doesn’t drop the flag.
+    if (value === '1') {
+      sessionStorage.setItem('boulders_force_black_week', '1');
+      return true;
+    }
+    if (value === '0') {
+      sessionStorage.setItem('boulders_force_black_week', '0');
+      return false;
+    }
+    const stored = sessionStorage.getItem('boulders_force_black_week');
+    if (stored === '1') return true;
+    if (stored === '0') return false;
+  } catch (_) {
+    // ignore
+  }
+  return null;
+}
+
+function isBlackWeekWindowOpen(now = new Date()) {
+  const force = getBlackWeekForceOverride();
+  if (force !== null) return force;
+  const ms = now instanceof Date ? now.getTime() : Date.now();
+  return ms >= BLACK_WEEK_START_MS && ms <= BLACK_WEEK_END_MS;
+}
+
+function isBlackWeekRoute(pathname = window.location.pathname) {
+  return normalizePathname(pathname) === '/black-week';
+}
+
+function getProductNumericId(productOrId) {
+  if (productOrId == null) return null;
+  if (typeof productOrId === 'object') {
+    const raw = productOrId.id ?? productOrId.productId;
+    return getProductNumericId(raw);
+  }
+  const n = typeof productOrId === 'string' ? parseInt(productOrId, 10) : Number(productOrId);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getProductNumberKey(product) {
+  if (!product || typeof product !== 'object') return '';
+  return String(product.productNumber ?? '').trim();
+}
+
+function findBlackWeekCatalogProductById(productOrId) {
+  const id = getProductNumericId(productOrId);
+  if (id == null) return null;
+  const pools = [
+    ...(state.blackWeekProducts || []),
+    ...(state.allRawProducts || []),
+  ];
+  return pools.find((p) => getProductNumericId(p) === id) || null;
+}
+
+function productHasAnyLabel(product, labels) {
+  return labels.some((label) => productHasLabel(product, label));
+}
+
+function isBlackWeekCoffeeProduct(product) {
+  return Boolean(product && typeof product === 'object' && productHasAnyLabel(product, BLACK_WEEK_COFFEE_LABELS));
+}
+
+function isBlackWeekPunchProduct(product) {
+  if (!product || typeof product !== 'object') return false;
+  if (isBlackWeekCoffeeProduct(product)) return false;
+  return productHasAnyLabel(product, BLACK_WEEK_PUNCH_LABELS);
+}
+
+function isBlackWeekProduct(product) {
+  return isBlackWeekCoffeeProduct(product) || isBlackWeekPunchProduct(product);
+}
+
+function getBlackWeekCoffeeProducts(products = state.blackWeekProducts) {
+  return (products || []).filter((p) => isBlackWeekCoffeeProduct(p));
+}
+
+function getBlackWeekCoffeeProduct() {
+  const coffees = getBlackWeekCoffeeProducts();
+  const selected = coffees.find((p) => String(getProductNumericId(p)) === String(state.blackWeekCoffeeProductId));
+  return selected || coffees[0] || null;
+}
+
+function getAllValueCardProducts() {
+  return [
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || []),
+    ...(state.blackWeekProducts || []),
+  ];
+}
+
+function getBlackWeekRemainingCaps() {
+  const ownedPunch = Number(state.blackWeekOwnedPunchCount) || 0;
+  const ownedCoffee = Number(state.blackWeekOwnedCoffeeCount) || 0;
+  return {
+    punch: Math.max(0, BLACK_WEEK_PUNCH_CAP - ownedPunch),
+    coffee: Math.max(0, BLACK_WEEK_COFFEE_CAP - ownedCoffee),
+  };
+}
+
+function blackWeekQtyMap(kind) {
+  const key = kind === 'coffee' ? 'blackWeekCoffeeQtys' : 'blackWeekPunchQtys';
+  const current = state[key];
+  if (!current || typeof current !== 'object' || Array.isArray(current)) state[key] = {};
+  return state[key];
+}
+
+function blackWeekQtyOf(kind, productId) {
+  const id = getProductNumericId(productId);
+  if (id == null) return 0;
+  return Math.max(0, Number(blackWeekQtyMap(kind)[String(id)]) || 0);
+}
+
+function blackWeekQtyTotal(kind) {
+  return Object.values(blackWeekQtyMap(kind)).reduce((sum, qty) => sum + (Number(qty) || 0), 0);
+}
+
+function setBlackWeekQty(kind, productId, qty) {
+  const id = getProductNumericId(productId);
+  if (id == null) return;
+  const map = blackWeekQtyMap(kind);
+  const next = Math.max(0, Math.floor(Number(qty) || 0));
+  if (next <= 0) delete map[String(id)];
+  else map[String(id)] = next;
+}
+
+function clearBlackWeekQty(kind) {
+  const key = kind === 'coffee' ? 'blackWeekCoffeeQtys' : 'blackWeekPunchQtys';
+  state[key] = {};
+  if (kind === 'coffee') {
+    state.blackWeekCoffeeProductId = null;
+    state.blackWeekCoffeeQty = 0;
+  } else {
+    state.blackWeekPunchProductId = null;
+    state.blackWeekPunchQty = 0;
+  }
+}
+
+function pruneBlackWeekQty(kind, products) {
+  const live = new Set((products || []).map((product) => String(getProductNumericId(product))));
+  const map = blackWeekQtyMap(kind);
+  Object.keys(map).forEach((key) => {
+    if (!live.has(key)) delete map[key];
+  });
+}
+
+function clampBlackWeekQty(kind, cap, products) {
+  pruneBlackWeekQty(kind, products);
+  const map = blackWeekQtyMap(kind);
+  const ordered = (products || [])
+    .map((product) => String(getProductNumericId(product)))
+    .filter((id) => map[id]);
+  let total = ordered.reduce((sum, id) => sum + (Number(map[id]) || 0), 0);
+  for (let i = ordered.length - 1; i >= 0 && total > cap; i -= 1) {
+    const id = ordered[i];
+    const qty = Number(map[id]) || 0;
+    const cut = Math.min(qty, total - cap);
+    const next = qty - cut;
+    if (next <= 0) delete map[id];
+    else map[id] = next;
+    total -= cut;
+  }
+}
+
+function classifyOwnedBlackWeekProduct(productOrId) {
+  let product = productOrId && typeof productOrId === 'object' ? productOrId : null;
+  if (!product) {
+    product = findBlackWeekCatalogProductById(productOrId);
+  } else if (!isBlackWeekProduct(product)) {
+    product = findBlackWeekCatalogProductById(product) || product;
+  }
+  if (!product) return null;
+  if (isBlackWeekCoffeeProduct(product)) return 'coffee';
+  if (isBlackWeekPunchProduct(product)) return 'punch';
+  return null;
+}
+
+function countOwnedBlackWeekCards(valueCards) {
+  let punch = 0;
+  let coffee = 0;
+  if (!Array.isArray(valueCards)) return { punch, coffee };
+  valueCards.forEach((vc) => {
+    const product = vc?.valueCardProduct || vc?.validCardProduct || vc?.product || vc;
+    const kind = classifyOwnedBlackWeekProduct(product)
+      || classifyOwnedBlackWeekProduct(vc?.valueCardProductId ?? vc?.productId);
+    if (kind === 'punch') punch += 1;
+    else if (kind === 'coffee') coffee += 1;
+  });
+  return { punch, coffee };
+}
+
+function applyBlackWeekSelectionToCartState() {
+  const caps = getBlackWeekRemainingCaps();
+  const products = state.blackWeekProducts || [];
+  const punches = products.filter((product) => isBlackWeekPunchProduct(product));
+  const coffees = getBlackWeekCoffeeProducts(products);
+  clampBlackWeekQty('punch', caps.punch, punches);
+  clampBlackWeekQty('coffee', caps.coffee, coffees);
+
+  state.valueCardQuantities.clear();
+  let primaryPunch = null;
+  punches.forEach((product) => {
+    const id = getProductNumericId(product);
+    const qty = blackWeekQtyOf('punch', id);
+    if (id != null && qty > 0) {
+      state.valueCardQuantities.set(`punch-${id}`, qty);
+      if (primaryPunch == null) primaryPunch = id;
+    }
+  });
+  let primaryCoffee = null;
+  coffees.forEach((product) => {
+    const id = getProductNumericId(product);
+    const qty = blackWeekQtyOf('coffee', id);
+    if (id != null && qty > 0) {
+      state.valueCardQuantities.set(`punch-${id}`, qty);
+      if (primaryCoffee == null) primaryCoffee = id;
+    }
+  });
+
+  state.blackWeekPunchProductId = primaryPunch;
+  state.blackWeekPunchQty = blackWeekQtyTotal('punch');
+  state.blackWeekCoffeeProductId = primaryCoffee;
+  state.blackWeekCoffeeQty = blackWeekQtyTotal('coffee');
+
+  if (primaryPunch != null) {
+    state.selectedProductType = 'punch-card';
+    state.selectedProductId = primaryPunch;
+    state.membershipPlanId = `punch-${primaryPunch}`;
+  } else if (primaryCoffee != null) {
+    state.selectedProductType = 'punch-card';
+    state.selectedProductId = primaryCoffee;
+    state.membershipPlanId = `punch-${primaryCoffee}`;
+  } else if (state.selectedProductType === 'punch-card') {
+    state.selectedProductId = null;
+    state.membershipPlanId = null;
+    state.selectedProductType = null;
+  }
+}
+
+// After a failed payment the cart the buyer tried to pay for is read back from
+// the order stored in the session (showPaymentFailedMessage, its retry button,
+// and showStep for the checkout step). On the Black Week checkout the cards are
+// counted in the quantity maps: the picker, the cart's quantity controls and
+// every later render go by the maps, and a cart the maps do not know is cleared
+// at the next render. So the restore passes its value card lines to this
+// function, which puts them in the maps and draws the picker and the cart from
+// them. Until the Black Week products are loaded the lines wait in
+// state.blackWeekRestoredCart, and the picker takes them at its next render
+// (ensureBlackWeekDefaultSelection).
+function adoptRestoredBlackWeekCart(valueCardLines) {
+  const isBlackWeekRoute = state.landingRouteConfig?.componentName === 'LandingBlackWeek';
+  state.blackWeekRestoredCart = isBlackWeekRoute ? valueCardLines : null;
+  if (takeRestoredBlackWeekCart()) syncBlackWeekQuantityUI();
+}
+
+// Writes the waiting lines of a restored cart into the Black Week quantity maps.
+// It takes the Black Week products to tell a punch card from a coffee card.
+// True when the maps now hold the restored cart.
+function takeRestoredBlackWeekCart() {
+  const lines = state.blackWeekRestoredCart;
+  const products = state.blackWeekProducts || [];
+  if (!Array.isArray(lines) || !lines.length || !products.length) return false;
+  state.blackWeekRestoredCart = null;
+
+  const cards = lines.map((line) => {
+    const id = getProductNumericId(line.productId ?? line.id);
+    return {
+      product: products.find((product) => getProductNumericId(product) === id),
+      quantity: Number(line.quantity) || 1,
+    };
+  });
+  // A cart with anything else in it stays the way it was restored.
+  if (cards.some((card) => !isBlackWeekProduct(card.product))) return false;
+
+  clearBlackWeekQty('punch');
+  clearBlackWeekQty('coffee');
+  cards.forEach(({ product, quantity }) => {
+    setBlackWeekQty(isBlackWeekCoffeeProduct(product) ? 'coffee' : 'punch', product, quantity);
+  });
+  // These lines are the cart until the next cart update builds it from the maps.
+  // That update reports new lines to tracking as added to the cart, and a
+  // restored cart has none.
+  if (!state.cartItems?.length) state.cartItems = lines;
+  return true;
+}
+
+async function refreshBlackWeekOwnedCaps(customerId = state.customerId) {
+  if (!customerId || !isUserAuthenticated()) {
+    state.blackWeekOwnedPunchCount = 0;
+    state.blackWeekOwnedCoffeeCount = 0;
+    return getBlackWeekRemainingCaps();
+  }
+  try {
+    const data = await _firstclimbAuthFetch(`/api/ver3/customers/${customerId}/valuecards`);
+    const list = Array.isArray(data) ? data : (data?.data || data?.items || []);
+    const counts = countOwnedBlackWeekCards(list);
+    state.blackWeekOwnedPunchCount = counts.punch;
+    state.blackWeekOwnedCoffeeCount = counts.coffee;
+  } catch (error) {
+    console.warn('[Black Week] Could not load owned value cards for caps:', error);
+    // Fall back to whatever is already on the authenticated profile
+    const profileCards = [
+      ...(state.authenticatedCustomer?.valueCards || []),
+      ...(state.authenticatedCustomer?.valuecards || []),
+      ...(state.authenticatedCustomer?.validCards || []),
+    ];
+    if (profileCards.length > 0) {
+      const counts = countOwnedBlackWeekCards(profileCards);
+      state.blackWeekOwnedPunchCount = counts.punch;
+      state.blackWeekOwnedCoffeeCount = counts.coffee;
+    }
+  }
+  applyBlackWeekSelectionToCartState();
+  return getBlackWeekRemainingCaps();
+}
 
 // Fitness, Single Gym, and Student & Youth Single Gym exist only at Boulders Aalborg (BRP business unit 13).
 const AALBORG_BUSINESS_UNIT_ID = '13';
@@ -1351,6 +1691,16 @@ const REQUIRED_FIELDS = [
   'password',
   'primaryGym',
 ];
+
+const BLACK_WEEK_SKIPPED_CREATE_FIELDS = new Set(['streetAddress', 'postalCode', 'city']);
+
+function isBlackWeekCreateForm() {
+  return document.body.classList.contains('blackweek-flow');
+}
+
+function isSkippedBlackWeekCreateField(fieldId) {
+  return isBlackWeekCreateForm() && BLACK_WEEK_SKIPPED_CREATE_FIELDS.has(fieldId);
+}
 
 const PARENT_REQUIRED_FIELDS = [
   'parentFullName',
@@ -3570,10 +3920,7 @@ class OrderAPI {
       if (amountInCentsFromCaller != null && typeof amountInCentsFromCaller === 'number' && !Number.isNaN(amountInCentsFromCaller)) {
         amount = Math.round(amountInCentsFromCaller);
       } else {
-        const allValueCards = [
-          ...(state.valueCards || []),
-          ...(state.campaignValueCards || []),
-        ];
+        const allValueCards = getAllValueCardProducts();
         const valueCardProduct = allValueCards.find(p =>
           p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)
         ) || (state.allRawProducts || []).find(p =>
@@ -4367,6 +4714,8 @@ async function loadProductsFromAPI() {
   const isFreeTrialLandingRoute = activeLandingRoute?.componentName === 'LandingFreeTrial';
   const isFirstMonthFreeLandingRoute = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
   const isFirstClimbLandingRoute = activeLandingRoute?.componentName === 'LandingFirstClimb';
+  const isBlackWeekLandingRoute = activeLandingRoute?.componentName === 'LandingBlackWeek';
+  const blackWeekWindowOpen = isBlackWeekWindowOpen();
   const displayLabelOptions = isFreeTrialLandingRoute
     ? { allowedVisibilityLabels: ['secret'] }
     : isFirstMonthFreeLandingRoute
@@ -4375,11 +4724,21 @@ async function loadProductsFromAPI() {
         // Accept the firstclimb label itself as a visibility token so a BRP product
         // carrying only `firstclimb` (no Public/Secret/PublicCampaign) still passes.
         ? { allowedVisibilityLabels: ['firstclimb', 'secret', 'public', 'publiccampaign'] }
-        : {};
+        : isBlackWeekLandingRoute || blackWeekWindowOpen
+          ? { allowedVisibilityLabels: ['blackweekpunchcard', 'blackweekpunchcards', 'blackweekcoffee', 'secret', 'public', 'publiccampaign'] }
+          : {};
 
   // Deduplicate concurrent calls (preload + step transition + showStep)
   if (productsLoadPromise) {
     return productsLoadPromise;
+  }
+
+  // Black Week landing: placeholder cards while the request is out, so step 2
+  // opens on the picker's outline instead of an empty page. Mounted here, at
+  // the start of the load, so the preload on gym click has them in place
+  // before the step is shown.
+  if (isBlackWeekLandingRoute && blackWeekWindowOpen) {
+    showBlackWeekShopSkeleton();
   }
 
   productsLoadPromise = (async () => {
@@ -4546,6 +4905,15 @@ async function loadProductsFromAPI() {
           return false;
         }
       }
+
+      // Black Week SKUs: sellable only while the window is open (Hidden still blocks).
+      if (isBlackWeekProduct(product)) {
+        if (!blackWeekWindowOpen) return false;
+        const hasHiddenLabel = product.productLabels?.some(
+          (label) => label.name && label.name.toLowerCase() === 'hidden'
+        );
+        return !hasHiddenLabel;
+      }
       
       // Check: Label-based filtering
       // Normal flow: apply visibility labels. Landing flows with explicit label filters bypass this gate.
@@ -4616,9 +4984,13 @@ async function loadProductsFromAPI() {
       return true;
     });
     
+    // Black Week value cards are never shown in Campaign / Punch Card categories
+    const blackWeekValueCards = valueCards.filter((product) => isBlackWeekProduct(product));
+
     // Separate value cards: those with "PublicCampaign" go to Campaign category
     // Value cards with "PublicCampaign" should appear in Campaign, not in Punch Card category
     const campaignValueCards = valueCards.filter(product => {
+      if (isBlackWeekProduct(product)) return false;
       // Check if product has "PublicCampaign" label
       const hasPublicCampaignLabel = product.productLabels?.some(
         label => label.name && label.name.toLowerCase() === 'publiccampaign'
@@ -4628,6 +5000,7 @@ async function loadProductsFromAPI() {
     
     // Regular value cards (without "PublicCampaign") go to Punch Card category
     const regularValueCards = valueCards.filter(product => {
+      if (isBlackWeekProduct(product)) return false;
       const hasPublicCampaignLabel = product.productLabels?.some(
         label => label.name && label.name.toLowerCase() === 'publiccampaign'
       );
@@ -4645,11 +5018,12 @@ async function loadProductsFromAPI() {
     });
     dayPassSubscriptions.sort(byPriceHighToLow);
     regularValueCards.sort(byPriceHighToLow);
+    blackWeekValueCards.sort(byPriceHighToLow);
 
     // Enrich value card products with GET /api/products/valuecards/{id} when the list payload
     // omits unit/clip fields (authoritative counts for cart totals).
     try {
-      await mergeValueCardProductDetails([campaignValueCards, regularValueCards]);
+      await mergeValueCardProductDetails([campaignValueCards, regularValueCards, blackWeekValueCards]);
     } catch (mergeErr) {
       console.warn('[Products] Value card detail merge failed:', mergeErr);
     }
@@ -4660,6 +5034,7 @@ async function loadProductsFromAPI() {
     state.subscriptions = membershipSubscriptions;
     state.dayPassSubscriptions = dayPassSubscriptions;
     state.valueCards = regularValueCards; // Only non-campaign value cards go to Punch Card category
+    state.blackWeekProducts = blackWeekWindowOpen ? blackWeekValueCards : [];
     
     if (activeLandingRoute) {
       const displayCandidates = [
@@ -4668,6 +5043,7 @@ async function loadProductsFromAPI() {
         ...dayPassSubscriptions,
         ...campaignValueCards,
         ...regularValueCards,
+        ...blackWeekValueCards,
       ];
       const uniqueDisplayCandidates = displayCandidates.filter((product, index, arr) => {
         const productKind = product?.priceWithInterval?.price?.amount !== undefined ? 'subscription' : 'valuecard';
@@ -4679,7 +5055,9 @@ async function loadProductsFromAPI() {
           return `${candidateKind}:${candidateId}` === identity;
         }) === index;
       });
-      const matched = getDisplayableRouteMatchedProducts(uniqueDisplayCandidates, activeLandingRoute.labelKey, displayLabelOptions)
+      const matched = (activeLandingRoute.componentName === 'LandingBlackWeek'
+        ? uniqueDisplayCandidates.filter((product) => isBlackWeekProduct(product))
+        : getDisplayableRouteMatchedProducts(uniqueDisplayCandidates, activeLandingRoute.labelKey, displayLabelOptions))
         .filter((product) => hasRequiredLabels(product, requiredLandingLabels))
         .sort(byPriceHighToLow);
       state.landingMatchedProducts = activeLandingRoute.mode === 'single'
@@ -4694,7 +5072,9 @@ async function loadProductsFromAPI() {
     }
 
 
-    // Re-render the membership plans with API data
+    // Re-render the membership plans with API data. The placeholders go first:
+    // renderProductsFromAPI() skips when the lists already have children.
+    clearBlackWeekShopSkeleton();
     renderProductsFromAPI();
     updateCartSummary();
     // Access-step FAQ mentions Single Gym and Fitness only when those products are in the catalog.
@@ -4702,10 +5082,19 @@ async function loadProductsFromAPI() {
       renderFAQ();
     }
 
+    if (blackWeekWindowOpen && isUserAuthenticated() && state.customerId) {
+      refreshBlackWeekOwnedCaps(state.customerId)
+        .then(() => {
+          syncBlackWeekQuantityUI();
+        })
+        .catch((err) => console.warn('[Black Week] Cap refresh after product load failed:', err));
+    }
+
     // Prewarm boost modal resources in the background so first open feels instant.
     prewarmBoostModalResources();
   } catch (error) {
     console.error('Failed to load products from API:', error);
+    clearBlackWeekShopSkeleton();
     // Show error message to user
     showToast('Failed to load membership options. Please try again later.', 'error');
     throw error;
@@ -4733,6 +5122,8 @@ function getProductsRenderKey() {
     ids(state.subscriptions),
     ids(state.dayPassSubscriptions),
     ids(state.valueCards),
+    ids(state.blackWeekProducts),
+    isBlackWeekWindowOpen() ? '1' : '0',
   ].join('|');
 }
 
@@ -4742,6 +5133,1045 @@ function productsAlreadyRendered(key) {
   if (key === null || key !== lastProductsRenderKey) return false;
   return Array.from(document.querySelectorAll('.plans-list'))
     .some((list) => list.children.length > 0);
+}
+
+function getBlackWeekPriceKr(product) {
+  const cents = product?.price?.amount ?? product?.amount ?? 0;
+  return roundToHalfKrone(Number(cents) / 100);
+}
+
+/** 10 paid + 3 free → “was” price is unit rate × 13. */
+function getBlackWeekPunchWasPriceKr(priceKr) {
+  return roundToHalfKrone(priceKr * 13 / 10);
+}
+
+// The normal price a Black Week card is compared with: the picker strikes it
+// through and the cart counts the saving from it. 0 when the card has none.
+function getBlackWeekWasPriceKr(product) {
+  const price = getBlackWeekPriceKr(product);
+  if (!isBlackWeekCoffeeProduct(product)) return getBlackWeekPunchWasPriceKr(price);
+  // Under 300 kr the coffee card price counts as the Black Week half price.
+  return price > 0 && price < 300 ? roundToHalfKrone(price * 2) : 0;
+}
+
+// Black Week prints whole kroner: "1.657,50" reads as "1.658". Display rounding
+// only — the order and the per-line savings keep their exact amounts, and a sum
+// is rounded once as a whole, not line by line.
+function formatBlackWeekKr(amount) {
+  return `${formatPriceHalfKrone(Math.round(amount))} kr`;
+}
+
+function formatBlackWeekCountdown(now = Date.now()) {
+  const ms = BLACK_WEEK_END_MS - now;
+  if (ms <= 0) return isDaFallback() ? 'nu' : 'now';
+  const totalMin = Math.floor(ms / 60000);
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin % (60 * 24)) / 60);
+  const mins = totalMin % 60;
+  const hourUnit = isDaFallback() ? 't' : 'h';
+  return `${days}d ${hours}${hourUnit} ${mins}m`;
+}
+
+let blackWeekCountdownTimer = null;
+function startBlackWeekCountdown() {
+  if (blackWeekCountdownTimer) return;
+  blackWeekCountdownTimer = setInterval(() => {
+    if (!isBlackWeekWindowOpen()) {
+      stopBlackWeekCountdown();
+      renderBlackWeekHeaderBar();
+      if (isBlackWeekRoute()) window.location.replace('/');
+      return;
+    }
+    const nodes = document.querySelectorAll('[data-bw-countdown]');
+    if (!nodes.length) {
+      stopBlackWeekCountdown();
+      return;
+    }
+    const label = formatBlackWeekCountdown();
+    nodes.forEach((el) => {
+      el.textContent = label;
+    });
+  }, 30000);
+}
+
+function stopBlackWeekCountdown() {
+  if (blackWeekCountdownTimer) {
+    clearInterval(blackWeekCountdownTimer);
+    blackWeekCountdownTimer = null;
+  }
+}
+
+function isDaFallback() {
+  return String(state?.language || 'da-DK').toLowerCase().startsWith('da');
+}
+
+function getBlackWeekPunchSegments(products) {
+  const punches = (products || []).filter((p) => isBlackWeekPunchProduct(p));
+  const known = [
+    { key: 'adult', number: '832' },
+    { key: 'youth', number: '831' },
+    { key: 'junior', number: '830' },
+  ];
+  const used = new Set();
+  const segments = [];
+  known.forEach((slot) => {
+    const product = punches.find((p) => getProductNumberKey(p) === slot.number);
+    if (!product) return;
+    used.add(getProductNumericId(product));
+    segments.push({ ...slot, product, label: product.name || slot.key, hint: '' });
+  });
+  punches.forEach((product) => {
+    const id = getProductNumericId(product);
+    if (used.has(id)) return;
+    segments.push({
+      key: 'other',
+      number: getProductNumberKey(product),
+      product,
+      label: product.name || 'Klippekort',
+      hint: '',
+    });
+  });
+  return segments;
+}
+
+// The picker's name and age hint for each known punch card, keyed like the
+// segments above. The cart names its lines from the same labels.
+function getBlackWeekPunchCopy() {
+  const isDa = isDaFallback();
+  return {
+    adult: { label: isDa ? 'Voksen' : 'Adult', hint: isDa ? 'Fra 21 år' : 'From 21' },
+    youth: { label: isDa ? 'Studerende & Ung' : 'Student & youth', hint: isDa ? '16–20 år eller studiekort' : '16–20 or student ID' },
+    junior: { label: isDa ? 'Junior' : 'Junior', hint: isDa ? 'Til og med 15 år' : 'Up to 15' },
+  };
+}
+
+// The Black Week checkout has its own cart: the picker's names, a price on
+// every line, the saving and the pickup gym. Same switch as its short create
+// form (isBlackWeekCreateForm).
+function isBlackWeekCart() {
+  return document.body.classList.contains('blackweek-flow');
+}
+
+// What the cart calls a Black Week card: the picker's section and card title,
+// e.g. "Klippekort · Voksen". BRP's product names read differently.
+function getBlackWeekCartLineName(product) {
+  const isDa = isDaFallback();
+  if (isBlackWeekCoffeeProduct(product)) return product.name || (isDa ? 'Kaffekort' : 'Coffee card');
+  const segment = getBlackWeekPunchSegments([product])[0];
+  const names = getBlackWeekPunchCopy()[segment?.key];
+  if (!names) return product.name || (isDa ? 'Klippekort' : 'Punch card');
+  return `${isDa ? 'Klippekort' : 'Punch card'} · ${names.label}`;
+}
+
+// What the Black Week cart lists: every Black Week card in the picker's order,
+// in the cart or not. A card that is not in the cart is a row with quantity 0,
+// so it can be added right there, and a row keeps its place when its quantity
+// changes. Quantities and line totals are the cart's own (state.cartItems).
+// Empty when the cart is not the Black Week one, or holds anything else than
+// Black Week cards: such a cart is drawn the regular way, line by line.
+function getBlackWeekCartRows() {
+  if (!isBlackWeekCart()) return [];
+  const products = Array.isArray(state.blackWeekProducts) ? state.blackWeekProducts : [];
+  const ordered = [
+    ...getBlackWeekPunchSegments(products).map((segment) => segment.product),
+    ...getBlackWeekCoffeeProducts(products),
+  ];
+  const items = state.cartItems || [];
+  const rows = ordered.map((product) => {
+    const id = getProductNumericId(product);
+    const item = items.find((candidate) => (
+      candidate.type === 'value-card' && getProductNumericId(candidate.productId ?? candidate.id) === id
+    ));
+    const quantity = Number(item?.quantity) || 0;
+    const unitKr = getBlackWeekPriceKr(product);
+    const wasKr = getBlackWeekWasPriceKr(product);
+    return {
+      item,
+      id,
+      kind: isBlackWeekCoffeeProduct(product) ? 'coffee' : 'punch',
+      name: getBlackWeekCartLineName(product),
+      description: product.externalDescription || product.description || '',
+      quantity,
+      unitKr,
+      totalKr: item ? item.amount : 0,
+      savingKr: wasKr > unitKr ? roundToHalfKrone((wasKr - unitKr) * quantity) : 0,
+    };
+  });
+  if (items.some((item) => !rows.some((row) => row.item === item))) return [];
+
+  // How many more cards of each kind the buyer may add, as in the picker.
+  const caps = getBlackWeekRemainingCaps();
+  const inCart = (kind) => rows.reduce((sum, row) => sum + (row.kind === kind ? row.quantity : 0), 0);
+  const room = {
+    punch: Math.max(0, caps.punch - inCart('punch')),
+    coffee: Math.max(0, caps.coffee - inCart('coffee')),
+  };
+  return rows.map((row) => ({ ...row, room: room[row.kind] }));
+}
+
+// Draws the rows of the Black Week cart into the cart list. Once they are on
+// screen a render updates them in place, like the picker: the quantity controls
+// animate with CSS transitions and hold the keyboard focus, and both need the
+// same elements before and after a change. `createInfoIcon` is the cart's
+// builder for the info icon after a product name. False when this cart has no
+// Black Week rows, and the caller then draws it the regular way.
+function renderBlackWeekCartRows(createInfoIcon) {
+  const allRows = getBlackWeekCartRows();
+  if (!allRows.length || !DOM.cartItems) return false;
+  // Only the cards in the cart are rows. A coffee card that is not there yet
+  // gets the add-on line below the rows instead.
+  const rows = allRows.filter((row) => row.quantity > 0);
+  if (!rows.length) return false;
+  const isDa = isDaFallback();
+
+  const next = document.createDocumentFragment();
+  rows.forEach((row, index) => {
+    const line = document.createElement('div');
+    line.className = 'cart-item cart-item--bw';
+
+    const title = document.createElement('span');
+    title.className = 'cart-item-title';
+    const info = createInfoIcon(row.description);
+    if (info) {
+      // The info icon wraps together with the last word of the name, so a name
+      // that takes two lines on a phone keeps the icon next to its text.
+      const lastWordStart = row.name.lastIndexOf(' ') + 1;
+      const tail = document.createElement('span');
+      tail.className = 'cart-item-title-tail';
+      tail.append(row.name.slice(lastWordStart), info);
+      title.append(row.name.slice(0, lastWordStart), tail);
+    } else {
+      title.textContent = row.name;
+    }
+
+    const total = document.createElement('span');
+    total.className = 'cart-item-total';
+    total.textContent = row.quantity > 0 ? formatBlackWeekKr(row.totalKr) : '';
+
+    const meta = document.createElement('span');
+    meta.className = 'cart-item-meta';
+    const perCard = `${formatBlackWeekKr(row.unitKr)} ${isDa ? 'pr. kort' : 'per card'}`;
+    meta.textContent = row.kind === 'punch'
+      ? `${isDa ? '13 klip' : '13 punches'} · ${perCard}`
+      : perCard;
+
+    const control = document.createElement('template');
+    control.innerHTML = sanitizeHTML(blackWeekQtyControlHtml({
+      kind: row.kind,
+      productId: row.id,
+      qty: row.quantity,
+      room: row.room,
+      name: row.name,
+    }));
+
+    line.append(title, total, meta, control.content);
+    next.append(line);
+
+    // Under the last card of a kind: why its plus buttons are off, once the
+    // limit is reached.
+    if (rows[index + 1]?.kind !== row.kind) {
+      const limit = document.createElement('p');
+      limit.className = 'cart-item-limit';
+      limit.hidden = row.room > 0;
+      if (row.kind === 'coffee') {
+        limit.textContent = isDa
+          ? `Max ${BLACK_WEEK_COFFEE_CAP} kaffekort pr. person`
+          : `Max ${BLACK_WEEK_COFFEE_CAP} coffee cards per person`;
+      } else {
+        limit.textContent = isDa
+          ? `Max ${BLACK_WEEK_PUNCH_CAP} klippekort pr. person`
+          : `Max ${BLACK_WEEK_PUNCH_CAP} punch cards per person`;
+      }
+      next.append(limit);
+    }
+  });
+
+  // No coffee card in the cart: one line offers it, and its + puts it there.
+  const coffeeRow = allRows.find((row) => row.kind === 'coffee' && row.room > 0);
+  if (coffeeRow && !rows.some((row) => row.kind === 'coffee')) {
+    const addon = document.createElement('div');
+    addon.className = 'cart-item cart-item--bw cart-item--bw-upsell';
+
+    const title = document.createElement('span');
+    title.className = 'cart-item-title';
+    title.textContent = `☕ ${isDa ? 'Kaffekort til halv pris' : 'Coffee card at half price'}`;
+
+    const meta = document.createElement('span');
+    meta.className = 'cart-item-meta';
+    const price = document.createElement('b');
+    price.textContent = formatBlackWeekKr(coffeeRow.unitKr);
+    meta.append(price);
+    const wasKr = getBlackWeekWasPriceKr((state.blackWeekProducts || []).find((p) => getProductNumericId(p) === coffeeRow.id));
+    if (wasKr > coffeeRow.unitKr) {
+      const was = document.createElement('s');
+      was.className = 'bw-upsell-was';
+      was.textContent = formatBlackWeekKr(wasKr);
+      meta.append(' ', was);
+    }
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'bw-upsell-add';
+    add.dataset.action = 'bw-qty';
+    add.dataset.kind = 'coffee';
+    add.dataset.delta = '1';
+    add.dataset.productId = String(coffeeRow.id);
+    add.textContent = isDa ? '+ Tilføj' : '+ Add';
+    add.setAttribute('aria-label', isDa ? `Tilføj ${coffeeRow.name}` : `Add ${coffeeRow.name}`);
+
+    addon.append(title, add, meta);
+    next.append(addon);
+  }
+
+  if (DOM.cartItems.querySelector(':scope > .cart-item--bw')) {
+    patchChildren(DOM.cartItems, next);
+  } else {
+    DOM.cartItems.replaceChildren(next);
+  }
+  if (DOM.cartAddonItems) {
+    DOM.cartAddonItems.innerHTML = '';
+    DOM.cartAddonItems.style.display = 'none';
+  }
+  return true;
+}
+
+function ensureBlackWeekDefaultSelection(products) {
+  state.subscriptionAdditions = [];
+  state.selectedAddonIds = [];
+  if (state.addonIds?.size) state.addonIds.clear();
+  // A cart restored after a failed payment that came in before the products did.
+  takeRestoredBlackWeekCart();
+  applyBlackWeekSelectionToCartState();
+}
+
+function ensureBlackWeekStickyBar() {
+  let bar = document.getElementById('blackWeekShopBar');
+  if (bar) return bar;
+  bar = document.createElement('div');
+  bar.id = 'blackWeekShopBar';
+  bar.className = 'bw-shop-bar';
+  bar.hidden = true;
+  bar.innerHTML = sanitizeHTML(`
+    <div class="bw-shop-bar-in">
+      <div class="bw-tot">
+        <span data-bw-summary></span>
+        <b data-bw-total>0 kr</b>
+      </div>
+      <button type="button" class="bw-cta" data-action="continue-blackweek">Fortsæt</button>
+    </div>
+  `);
+  document.body.appendChild(bar);
+  return bar;
+}
+
+function removeBlackWeekStickyBar() {
+  document.getElementById('blackWeekShopBar')?.remove();
+  if (!document.querySelector('#blackWeekHeaderBar [data-bw-countdown]')) {
+    stopBlackWeekCountdown();
+  }
+}
+
+function updateBlackWeekStickyBar({ totalKr, summary, canContinue }) {
+  const bar = ensureBlackWeekStickyBar();
+  if (!bar.querySelector('[data-bw-summary]')) {
+    bar.remove();
+    return updateBlackWeekStickyBar({ totalKr, summary, canContinue });
+  }
+  // The bar belongs to the picker's step. The picker also re-renders on other
+  // steps (a language switch on the checkout), and there the bar stays away
+  // until showStep() brings it back.
+  bar.hidden = state.currentStep !== 2;
+  const totalEl = bar.querySelector('[data-bw-total]');
+  const summaryEl = bar.querySelector('[data-bw-summary]');
+  const cta = bar.querySelector('[data-action="continue-blackweek"]');
+  const isDa = isDaFallback();
+  if (totalEl) totalEl.textContent = formatBlackWeekKr(totalKr);
+  if (summaryEl) summaryEl.textContent = summary || '';
+  if (cta) {
+    cta.disabled = !canContinue;
+    // This button leads to the checkout step. "Gå til betaling" is on the cart's
+    // pay button there, which is the one that opens the payment.
+    cta.textContent = isDa ? 'Til kassen' : 'Checkout';
+  }
+}
+
+// True when the real card picker is on screen. Its loading skeleton borrows the
+// .bw-shop wrapper for the styles and does not count as the shop.
+function isBlackWeekShopMounted() {
+  return Boolean(document.querySelector('[data-bw-shop-root] .bw-shop:not(.bw-shop--loading)'));
+}
+
+// Section headers shared by the card picker and its loading skeleton. One per
+// card kind instead of a single title over the whole shop.
+function blackWeekPunchHeadingHtml() {
+  const isDa = isDaFallback();
+  return `
+        <h2 class="bw-title">${isDa ? 'Vælg dit klippekort' : 'Choose your punch card'}</h2>`;
+}
+
+function blackWeekCoffeeHeadingHtml() {
+  const isDa = isDaFallback();
+  return `
+        <h2 class="bw-title bw-title--coffee">${isDa ? 'Vælg antal Kaffekort' : 'Choose number of coffee cards'}</h2>`;
+}
+
+// Placeholder cards for the Black Week picker while the catalog request is out.
+// Built from the shop's own markup (three punch cards, one coffee card) so it
+// takes up the room the real picker will. Only fills an empty picker: once
+// cards are on screen, a reload keeps them until the fresh ones arrive.
+function showBlackWeekShopSkeleton() {
+  const host = document.querySelector('[data-category="blackweek"]');
+  const root = host?.querySelector('[data-bw-shop-root]');
+  if (!root || root.children.length > 0) return;
+
+  const bar = (variant) => `<span class="skeleton skeleton--${variant}"></span>`;
+  const label = `<div class="bw-lab"><span>${bar('lg')}</span><span>${bar('xs')}</span></div>`;
+  const card = `
+          <div class="bw-choice">
+            <div class="bw-choice-main">
+              <div class="bw-choice-title">${bar('sm')}</div>
+              <div class="bw-choice-desc">${bar('md')}</div>
+              ${bar('pill')}
+            </div>
+            <div class="bw-choice-price">
+              <b>${bar('xs')}</b>
+              <span class="bw-was">${bar('xs')}</span>
+              <div class="bw-q">${bar('round')}</div>
+            </div>
+          </div>`;
+
+  // The host is collapsed until something renders into it; open it the way the
+  // shop render does so the placeholders are visible.
+  host.classList.add('expanded', 'selected');
+  root.innerHTML = sanitizeHTML(`
+    <div class="bw-shop bw-shop--loading">
+      <div class="bw-wrap">
+        ${blackWeekPunchHeadingHtml()}
+        <span class="visually-hidden">${t('modal.loading')}</span>
+        <div aria-hidden="true">
+          ${label}
+          ${card.repeat(3)}
+          <div class="bw-note">${bar('lg')}</div>
+          ${blackWeekCoffeeHeadingHtml()}
+          ${label}
+          ${card}
+          <div class="bw-other">${bar('xl')}</div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function clearBlackWeekShopSkeleton() {
+  document.querySelector('[data-bw-shop-root] .bw-shop--loading')?.remove();
+}
+
+// The quantity control of a Black Week card, in the picker and in the cart. All
+// three parts are always in the markup and data-qty carries the state. At 0 the
+// CSS folds the minus button and the number away behind the plus button, and
+// the number is a column of digits that the CSS slides to the current one. That
+// lets the control open, close and count with transitions. `room` is how many
+// more cards of this kind fit under the limit, and `name` is the card the two
+// buttons are named after for a screen reader.
+function blackWeekQtyControlHtml({ kind, productId, qty, room, name }) {
+  const isDa = isDaFallback();
+  const button = (delta, className, sign, label, isOff = false) => `<button type="button" class="${className}" data-action="bw-qty" data-kind="${kind}" data-delta="${delta}" data-product-id="${productId}" aria-label="${escapeHtml(label)}"${isOff ? ' aria-disabled="true"' : ''}>${sign}</button>`;
+  const cap = kind === 'coffee' ? BLACK_WEEK_COFFEE_CAP : BLACK_WEEK_PUNCH_CAP;
+  const digits = Array.from({ length: cap }, (_, i) => `<span>${i + 1}</span>`).join('');
+  const minus = button(-1, 'minus', '−', `${isDa ? 'Fjern' : 'Remove'} ${name}`);
+  const plus = room > 0
+    ? button(1, 'plus', '+', `${isDa ? 'Tilføj' : 'Add'} ${name}`)
+    : button(1, 'plus dis', '+', `${isDa ? 'Tilføj' : 'Add'} ${name}`, true);
+  return `<div class="bw-q" data-qty="${qty}">${minus}<span class="bw-q-num"><span class="visually-hidden">${qty}</span><span class="bw-q-digits" aria-hidden="true">${digits}</span></span>${plus}</div>`;
+}
+
+function renderBlackWeekCategory({ landingMode = false } = {}) {
+  const categoryItem = document.querySelector('[data-category="blackweek"]');
+  const root = categoryItem?.querySelector('[data-bw-shop-root]') || categoryItem?.querySelector('.plans-list');
+  if (!categoryItem || !root) return;
+
+  const products = Array.isArray(state.blackWeekProducts) ? state.blackWeekProducts : [];
+  const windowOpen = isBlackWeekWindowOpen();
+  // Full shop is exclusive to /black-week — never mount it on the main catalog.
+  const showShop = landingMode && windowOpen && products.length > 0;
+
+  if (!showShop) {
+    state.blackWeekReview = false;
+    categoryItem.style.display = 'none';
+    root.innerHTML = '';
+    removeBlackWeekStickyBar();
+    if (!landingMode) document.body.classList.remove('blackweek-flow');
+    return;
+  }
+
+  categoryItem.style.display = '';
+  categoryItem.classList.add('expanded', 'selected', 'bw-shop-host');
+  categoryItem.dataset.landingLocked = 'true';
+  document.body.classList.add('blackweek-flow');
+
+  ensureBlackWeekDefaultSelection(products);
+
+  const caps = getBlackWeekRemainingCaps();
+  const segments = getBlackWeekPunchSegments(products);
+  const coffeeProducts = getBlackWeekCoffeeProducts(products);
+
+  const punchQty = blackWeekQtyTotal('punch');
+  const coffeeQty = blackWeekQtyTotal('coffee');
+  const isDa = isDaFallback();
+  const punchRoom = Math.max(0, caps.punch - punchQty);
+  const coffeeRoom = Math.max(0, caps.coffee - coffeeQty);
+  const canContinue = (punchQty + coffeeQty) >= 1;
+
+  const copy = getBlackWeekPunchCopy();
+
+  const choiceCard = ({ on, kind, productId, name, title, desc, pill, price, was, qty, room }) => `
+    <div class="bw-choice ${on ? 'on' : ''}">
+      <div class="bw-choice-main">
+        <div class="bw-choice-title">${title}</div>
+        <div class="bw-choice-desc">${desc}</div>
+        ${pill ? `<span class="bw-pill">${pill}</span>` : ''}
+      </div>
+      <div class="bw-choice-price">
+        <b>${formatBlackWeekKr(price)}</b>
+        ${was > price ? `<span class="bw-was">${formatBlackWeekKr(was)}</span>` : ''}
+        ${blackWeekQtyControlHtml({ kind, productId, qty, room, name })}
+      </div>
+    </div>`;
+
+  let punchSpend = 0;
+  const punchChoices = segments.map((seg) => {
+    if (!seg.product) return '';
+    const id = getProductNumericId(seg.product);
+    const qty = blackWeekQtyOf('punch', id);
+    const price = getBlackWeekPriceKr(seg.product);
+    const was = getBlackWeekWasPriceKr(seg.product);
+    const names = copy[seg.key] || { label: seg.label || seg.product.name, hint: seg.hint || '' };
+    if (qty > 0) {
+      punchSpend += price * qty;
+    }
+    return choiceCard({
+      on: qty > 0,
+      kind: 'punch',
+      productId: id,
+      name: getBlackWeekCartLineName(seg.product),
+      title: names.label,
+      // The punch count sits in the hint line, where it doesn't wrap the title.
+      desc: names.hint ? `${names.hint} · ${isDa ? '13 klip' : '13 punches'}` : (isDa ? '13 klip' : '13 punches'),
+      // The deal is already on the card as the struck-through price; the pill
+      // says what it comes to. Display rounding keeps the three numbers
+      // consistent: 1.658 − 1.275 = Spar 383.
+      pill: was > price ? `${isDa ? 'Spar' : 'Save'} ${formatBlackWeekKr(was - price)}` : '',
+      price,
+      was,
+      qty,
+      room: punchRoom,
+    });
+  }).join('');
+
+  let coffeeSpend = 0;
+  let coffeeHalfPrice = false;
+  const coffeeChoices = coffeeProducts.map((product) => {
+    const id = getProductNumericId(product);
+    const qty = blackWeekQtyOf('coffee', id);
+    const price = getBlackWeekPriceKr(product);
+    const was = getBlackWeekWasPriceKr(product);
+    const name = product.name || (isDa ? 'Kaffekort' : 'Coffee card');
+    if (was > price) coffeeHalfPrice = true;
+    if (qty > 0) {
+      coffeeSpend += price * qty;
+    }
+    return choiceCard({
+      on: qty > 0,
+      kind: 'coffee',
+      productId: id,
+      name: getBlackWeekCartLineName(product),
+      title: name,
+      desc: isDa ? '11 varme drikke · alle 11 haller' : '11 hot drinks · all 11 gyms',
+      pill: was > price ? '-50%' : '',
+      price,
+      was,
+      qty,
+      room: coffeeRoom,
+    });
+  }).join('');
+
+  const totalKr = roundToHalfKrone(punchSpend + coffeeSpend);
+  const summaryParts = [];
+  if (punchQty > 0) {
+    summaryParts.push(isDa
+      ? `${punchQty} klippekort`
+      : `${punchQty} punch card${punchQty === 1 ? '' : 's'}`);
+  }
+  if (coffeeQty > 0) {
+    summaryParts.push(isDa
+      ? `${coffeeQty} kaffekort`
+      : `${coffeeQty} coffee card${coffeeQty === 1 ? '' : 's'}`);
+  }
+
+  const shopHtml = sanitizeHTML(`
+    <div class="bw-shop">
+      <div class="bw-wrap">
+        ${punchChoices ? `
+        ${blackWeekPunchHeadingHtml()}
+        <div class="bw-lab"><span>${isDa ? 'KLIPPEKORT · 13 KLIP FOR 10' : 'PUNCH CARD · 13 FOR 10'}</span><span>MAX 3${caps.punch < BLACK_WEEK_PUNCH_CAP ? ` · ${caps.punch}` : ''}</span></div>
+        ${punchChoices}
+        <div class="bw-note">${isDa ? 'Max 3 klippekort pr. person' : 'Max 3 punch cards per person'}</div>` : ''}
+        ${coffeeChoices ? `
+        ${blackWeekCoffeeHeadingHtml()}
+        <div class="bw-lab"><span>${isDa ? 'KAFFEKORT' : 'COFFEE CARD'}${coffeeHalfPrice ? (isDa ? ' · HALV PRIS' : ' · HALF PRICE') : ''}</span><span>MAX 5${caps.coffee < BLACK_WEEK_COFFEE_CAP ? ` · ${caps.coffee}` : ''}</span></div>
+        ${coffeeChoices}` : ''}
+        ${landingMode ? `
+        <div class="bw-other">${isDa ? 'Leder du efter medlemskab eller prøvepas?' : 'Looking for membership or a trial pass?'}
+          <button type="button" data-action="bw-see-all">${isDa ? 'Se alle produkter' : 'See all products'}</button>
+        </div>` : ''}
+      </div>
+    </div>
+  `);
+  // Once the picker is on screen, a render updates it in place. The quantity
+  // controls animate with CSS transitions, and those need the same elements
+  // before and after the change.
+  if (isBlackWeekShopMounted()) {
+    const next = document.createElement('template');
+    next.innerHTML = shopHtml;
+    patchChildren(root, next.content);
+  } else {
+    root.innerHTML = shopHtml;
+  }
+
+  startBlackWeekCountdown();
+  updateBlackWeekStickyBar({
+    totalKr,
+    summary: summaryParts.join(' + '),
+    canContinue,
+  });
+  updateCartSummary();
+  updateCheckoutButton();
+
+  // The first render with cards on screen is the list view. Re-renders of the
+  // same picker (quantity changes, language switches) are not.
+  if (!state.blackWeekListTracked && window.GTM?.trackViewItemList) {
+    const listed = [
+      ...segments.map((seg) => seg.product).filter(Boolean),
+      ...coffeeProducts,
+    ];
+    if (listed.length) {
+      state.blackWeekListTracked = true;
+      try {
+        window.GTM.trackViewItemList(listed.map((p) => blackWeekGa4Item(p)), 'Black Week');
+      } catch (error) {
+        console.warn('[GTM] Error tracking view_item_list:', error);
+      }
+    }
+  }
+}
+
+function syncBlackWeekQuantityUI() {
+  applyBlackWeekSelectionToCartState();
+  const isLanding = state.landingRouteConfig?.componentName === 'LandingBlackWeek';
+  if (isLanding) {
+    renderBlackWeekCategory({ landingMode: true });
+  } else {
+    // Stay on main catalog: keep shop host empty and refresh the promo door only.
+    const bwHost = document.querySelector('[data-category="blackweek"]');
+    if (bwHost) {
+      bwHost.style.display = 'none';
+      const root = bwHost.querySelector('[data-bw-shop-root]');
+      if (root) root.innerHTML = '';
+    }
+    removeBlackWeekStickyBar();
+    document.body.classList.remove('blackweek-flow');
+    renderBlackWeekPromoEntry();
+    updateCartSummary();
+    updateCheckoutButton();
+  }
+}
+
+// A started order holds the cards it was started with. When the buyer changes a
+// quantity, that order is let go and the next checkout starts a new one from
+// the cart as it is then. The total, and what is charged, would otherwise stay
+// with the old order.
+function dropStartedOrderForBlackWeekCart() {
+  if (!state.orderId && !state.fullOrder) return;
+  state.order = null;
+  state.fullOrder = null;
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.paymentLink = null;
+  state.paymentLinkGenerated = false;
+  try {
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (_) {
+    // The stored copy is only read on the way back from the payment page.
+  }
+}
+
+// A Black Week card as a GA4 item: the card kind as the category, 'Black Week'
+// as the list, the BRP name trimmed of its trailing spaces (formatProductForGA4
+// trims again, defensively).
+function blackWeekGa4Item(product, quantity = 1) {
+  return {
+    id: getProductNumericId(product),
+    name: String(product?.name || '').trim(),
+    price: getBlackWeekPriceKr(product),
+    quantity,
+    type: isBlackWeekCoffeeProduct(product) ? 'Kaffekort' : 'Klippekort',
+    item_list_name: 'Black Week',
+  };
+}
+
+// Every + and − on a Black Week card reports the card it added or removed, at
+// the card's own price — not the cart total. The generic add_to_cart in
+// updateCart() is off on this route (it only sees the first time a line
+// appears, and values it at the cart total).
+function trackBlackWeekQtyChange(product, deltaApplied) {
+  if (!product || !deltaApplied || !window.GTM) return;
+  const quantity = Math.abs(deltaApplied);
+  const item = blackWeekGa4Item(product, quantity);
+  const value = item.price * quantity;
+  try {
+    if (deltaApplied > 0) {
+      window.GTM.trackAddToCart([item], value, 'DKK');
+    } else if (window.GTM.trackRemoveFromCart) {
+      window.GTM.trackRemoveFromCart([item], value, 'DKK');
+    }
+  } catch (error) {
+    console.warn('[GTM] Error tracking Black Week quantity change:', error);
+  }
+}
+
+function adjustBlackWeekProductQty(productId, kind, delta) {
+  // The cart is fixed, quantities included, while its order is on the way to
+  // payment (the cart's own renders stop for that time too).
+  if (state.checkoutInProgress) return;
+  const id = getProductNumericId(productId);
+  const step = Number(delta) || 0;
+  if (id == null || !step) return;
+  const resolvedKind = kind === 'coffee' ? 'coffee' : 'punch';
+  const caps = getBlackWeekRemainingCaps();
+  const cap = resolvedKind === 'coffee' ? caps.coffee : caps.punch;
+  const current = blackWeekQtyOf(resolvedKind, id);
+  const roomForThis = Math.max(0, cap - (blackWeekQtyTotal(resolvedKind) - current));
+  const next = Math.max(0, Math.min(roomForThis, current + step));
+  if (step > 0 && next === current) {
+    showToast(
+      resolvedKind === 'coffee'
+        ? (t('blackweek.cap.coffeeExhausted') || 'Coffee card limit reached for this profile.')
+        : (t('blackweek.cap.punchExhausted') || 'Punch card limit reached for this profile.'),
+      'error'
+    );
+    return;
+  }
+  setBlackWeekQty(resolvedKind, id, next);
+  if (resolvedKind === 'punch' && next > 0) state.selectedProductType = 'punch-card';
+  if (next !== current) {
+    dropStartedOrderForBlackWeekCart();
+    const product = (state.blackWeekProducts || []).find((p) => getProductNumericId(p) === id);
+    trackBlackWeekQtyChange(product, next - current);
+  }
+  syncBlackWeekQuantityUI();
+}
+
+function handleBlackWeekSegmentSelect(productId) {
+  const id = getProductNumericId(productId);
+  if (id == null) return;
+  if (blackWeekQtyOf('punch', id) > 0) {
+    setBlackWeekQty('punch', id, 0);
+    syncBlackWeekQuantityUI();
+    return;
+  }
+  adjustBlackWeekProductQty(id, 'punch', 1);
+}
+
+function handleBlackWeekToggleCoffee(productId) {
+  const id = getProductNumericId(productId);
+  if (id == null) return;
+  if (blackWeekQtyOf('coffee', id) > 0) {
+    setBlackWeekQty('coffee', id, 0);
+    syncBlackWeekQuantityUI();
+    return;
+  }
+  adjustBlackWeekProductQty(id, 'coffee', 1);
+}
+
+function adjustBlackWeekQuantity(planId, kind, delta) {
+  const raw = String(planId || '').replace(/^punch-/, '');
+  const id = getProductNumericId(raw);
+  if (id == null) return;
+  adjustBlackWeekProductQty(id, kind === 'coffee' ? 'coffee' : 'punch', delta);
+}
+
+function ensureBlackWeekUpsellModal() {
+  let modal = document.getElementById('blackWeekUpsellModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'blackWeekUpsellModal';
+  modal.className = 'bw-upsell';
+  modal.hidden = true;
+  modal.innerHTML = sanitizeHTML(`
+    <div class="bw-upsell-card" role="dialog" aria-modal="true" aria-labelledby="bwUpsellTitle">
+      <h3 id="bwUpsellTitle" data-bw-upsell-title></h3>
+      <p data-bw-upsell-body></p>
+      <div class="bw-upsell-actions">
+        <button type="button" class="bw-upsell-primary" data-action="bw-upsell-add" data-bw-upsell-add></button>
+        <button type="button" class="bw-upsell-secondary" data-action="bw-upsell-skip" data-bw-upsell-skip></button>
+      </div>
+    </div>
+  `);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) hideBlackWeekUpsellModal();
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function hideBlackWeekUpsellModal() {
+  const modal = document.getElementById('blackWeekUpsellModal');
+  if (modal) modal.hidden = true;
+  state.blackWeekUpsellMissing = null;
+}
+
+function showBlackWeekUpsellModal(missing) {
+  const isDa = isDaFallback();
+  const modal = ensureBlackWeekUpsellModal();
+  const products = state.blackWeekProducts || [];
+  const coffee = products.find((p) => isBlackWeekCoffeeProduct(p));
+  const punch = getBlackWeekPunchSegments(products).find((s) => s.product)?.product;
+  const title = modal.querySelector('[data-bw-upsell-title]');
+  const body = modal.querySelector('[data-bw-upsell-body]');
+  const addBtn = modal.querySelector('[data-bw-upsell-add]');
+  const skipBtn = modal.querySelector('[data-bw-upsell-skip]');
+  state.blackWeekUpsellMissing = missing;
+
+  if (missing === 'coffee') {
+    const price = coffee ? formatBlackWeekKr(getBlackWeekPriceKr(coffee)) : '';
+    if (title) title.textContent = isDa ? 'Tilføj kaffekort?' : 'Add a coffee card?';
+    if (body) {
+      body.textContent = isDa
+        ? `Du har kun klippekort i kurven. Kaffekortet koster ${price} og kan købes i samme ordre.`
+        : `Your cart only has a punch card. The coffee card is ${price} and can be added to the same order.`;
+    }
+    if (addBtn) addBtn.textContent = isDa ? 'Tilføj kaffekort' : 'Add coffee card';
+  } else {
+    const price = punch ? formatBlackWeekKr(getBlackWeekPriceKr(punch)) : '';
+    if (title) title.textContent = isDa ? 'Tilføj klippekort?' : 'Add a punch card?';
+    if (body) {
+      body.textContent = isDa
+        ? `Du har kun kaffekort i kurven. Klippekortet starter fra ${price} — 13 klip for prisen af 10.`
+        : `Your cart only has a coffee card. Punch cards start at ${price} — 13 punches for the price of 10.`;
+    }
+    if (addBtn) addBtn.textContent = isDa ? 'Tilføj klippekort' : 'Add punch card';
+  }
+  if (skipBtn) skipBtn.textContent = isDa ? 'Fortsæt uden' : 'Continue without';
+  modal.hidden = false;
+  addBtn?.focus();
+}
+
+function addMissingBlackWeekProduct(missing) {
+  const caps = getBlackWeekRemainingCaps();
+  if (missing === 'coffee') {
+    if (caps.coffee <= 0 || blackWeekQtyTotal('coffee') > 0) return blackWeekQtyTotal('coffee') > 0;
+    const coffee = getBlackWeekCoffeeProducts()[0];
+    if (!coffee) return false;
+    setBlackWeekQty('coffee', getProductNumericId(coffee), 1);
+    return true;
+  }
+  if (caps.punch <= 0 || blackWeekQtyTotal('punch') > 0) return blackWeekQtyTotal('punch') > 0;
+  const preferred = getBlackWeekPunchSegments(state.blackWeekProducts).find((segment) => segment.product)?.product;
+  if (!preferred) return false;
+  setBlackWeekQty('punch', getProductNumericId(preferred), 1);
+  return true;
+}
+
+function handleBlackWeekUpsellAdd() {
+  const missing = state.blackWeekUpsellMissing;
+  hideBlackWeekUpsellModal();
+  if (!missing || !addMissingBlackWeekProduct(missing)) return;
+  syncBlackWeekQuantityUI();
+}
+
+function handleBlackWeekUpsellSkip() {
+  hideBlackWeekUpsellModal();
+  nextStep();
+}
+
+function handleBlackWeekReviewBack() {
+  state.blackWeekReview = false;
+  syncBlackWeekQuantityUI();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Discount codes are not for Black Week cards and the Black Week cart hides the
+// field. A code from the regular flow would still be sent at checkout, so it is
+// dropped on the way into the cart: an applied one together with the order it
+// sits on (the reset a product change gets), a typed one by clearing the field.
+function dropDiscountCodeForBlackWeekCart() {
+  if (state.discountApplied || state.discountCode) {
+    resetOrderStateForProductChange('black-week-cart');
+  }
+  if (DOM.discountInput?.value) {
+    resetLocalDiscountState();
+    clearDiscountMessage();
+  }
+}
+
+function handleBlackWeekContinue() {
+  dropDiscountCodeForBlackWeekCart();
+  applyBlackWeekSelectionToCartState();
+  const punchQty = Number(state.blackWeekPunchQty) || 0;
+  const coffeeQty = Number(state.blackWeekCoffeeQty) || 0;
+  if (punchQty + coffeeQty < 1) {
+    showToast(t('blackweek.selectRequired') || 'Select a punch card and/or a coffee card to continue.', 'error');
+    return;
+  }
+  state.blackWeekReview = false;
+
+  // "Til kassen" is where this flow's checkout begins. The pay button's generic
+  // begin_checkout is off on this route.
+  if (window.GTM?.trackBeginCheckout) {
+    const items = getBlackWeekCartRows()
+      .filter((row) => row.quantity > 0)
+      .map((row) => {
+        const product = (state.blackWeekProducts || []).find((p) => getProductNumericId(p) === row.id);
+        return product ? blackWeekGa4Item(product, row.quantity) : null;
+      })
+      .filter(Boolean);
+    if (items.length) {
+      try {
+        const value = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        window.GTM.trackBeginCheckout(items, value, 'DKK');
+      } catch (error) {
+        console.warn('[GTM] Error tracking begin_checkout:', error);
+      }
+    }
+  }
+
+  nextStep();
+}
+
+function handleBlackWeekChangeGym() {
+  state.blackWeekReview = false;
+  state.currentStep = 1;
+  if (typeof showStep === 'function') showStep(1);
+  if (typeof updateStepIndicator === 'function') updateStepIndicator();
+  if (typeof updateNavigationButtons === 'function') updateNavigationButtons();
+  if (typeof updateMainSubtitle === 'function') updateMainSubtitle();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function buildBlackWeekPath(pathname) {
+  const params = new URLSearchParams(window.location.search);
+  const qs = params.toString();
+  return `${pathname}${qs ? `?${qs}` : ''}`;
+}
+
+function navigateBlackWeekSurface(pathname) {
+  const nextPath = normalizePathname(pathname);
+  const url = buildBlackWeekPath(nextPath === '/' ? '/' : nextPath);
+  try {
+    window.history.pushState({ blackWeekNav: true }, '', url);
+  } catch (_) {
+    window.location.assign(url);
+    return;
+  }
+  state.landingRouteConfig = resolveLandingRouteConfig(nextPath);
+  applyLandingRouteMarker(state.landingRouteConfig);
+  if (typeof applyRouteIndexingPolicy === 'function') {
+    applyRouteIndexingPolicy(nextPath);
+  }
+  document.body.classList.toggle(
+    'blackweek-flow',
+    state.landingRouteConfig?.componentName === 'LandingBlackWeek'
+  );
+  if (!state.landingRouteConfig) {
+    removeBlackWeekStickyBar();
+    document.body.classList.remove('blackweek-flow');
+  }
+  renderBlackWeekHeaderBar();
+  if (state.selectedBusinessUnit) {
+    renderProductsFromAPI({ force: true });
+  }
+  // The Black Week checkout draws the cart its own way (renderBlackWeekCartRows),
+  // so the cart is redrawn for the surface that is now showing.
+  updateCartSummary();
+  if (typeof updateMainSubtitle === 'function') updateMainSubtitle();
+  if (typeof updateStepIndicator === 'function') updateStepIndicator();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function openBlackWeekStorefront() {
+  // Prefer in-app navigation so gym selection survives; fall back to hard nav.
+  if (!isBlackWeekWindowOpen()) {
+    showToast(t('blackweek.closed') || 'Black Week is not open right now.', 'error');
+    return;
+  }
+  navigateBlackWeekSurface('/black-week');
+  // If pushState render somehow left us without the shop, hard-navigate.
+  requestAnimationFrame(() => {
+    if (!isBlackWeekShopMounted() && isBlackWeekWindowOpen()) {
+      window.location.assign(buildBlackWeekPath('/black-week'));
+    }
+  });
+}
+
+function handleBlackWeekSeeAllProducts() {
+  navigateBlackWeekSurface('/');
+}
+
+function blackWeekHeaderMode(step = state.currentStep) {
+  if (!isBlackWeekWindowOpen() || isPasswordResetRoute()) return 'hidden';
+  const stepNumber = Number(step) || 1;
+  if (stepNumber >= TOTAL_STEPS) return 'hidden';
+  const landing = state.landingRouteConfig || resolveLandingRouteConfig();
+  if (landing?.componentName === 'LandingBlackWeek') return 'countdown';
+  if (landing) return 'hidden';
+  if (stepNumber >= 4) return 'hidden';
+  return 'cta';
+}
+
+function syncBlackWeekHeaderOffset() {
+  const slot = document.getElementById('blackWeekHeaderBar');
+  const height = slot && !slot.hidden ? Math.round(slot.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty('--bw-bar-height', `${height}px`);
+}
+
+function renderBlackWeekHeaderBar(step = state.currentStep) {
+  const slot = document.getElementById('blackWeekHeaderBar');
+  if (!slot) return;
+  const mode = blackWeekHeaderMode(step);
+  if (mode === 'hidden') {
+    slot.hidden = true;
+    slot.innerHTML = '';
+    syncBlackWeekHeaderOffset();
+    if (!document.querySelector('[data-bw-countdown]')) stopBlackWeekCountdown();
+    return;
+  }
+  const isDa = isDaFallback();
+  const endsLabel = isDa ? 'Slutter om' : 'Ends in';
+  const time = formatBlackWeekCountdown();
+  const count = `<span class="bw-header-count">${endsLabel}<br><em data-bw-countdown>${time}</em></span>`;
+  const word = 'BLACK <i>WEEK</i>';
+  if (mode === 'cta') {
+    const cta = isDa ? 'Se tilbuddet' : 'See the offer';
+    slot.innerHTML = sanitizeHTML(
+      `<button type="button" class="bw-header-bar" data-action="bw-open-storefront"><b>${word}</b><span class="bw-header-meta">${count}<span class="bw-header-cta">${cta}</span></span></button>`
+    );
+  } else {
+    slot.innerHTML = sanitizeHTML(
+      `<div class="bw-header-bar"><b>${word}</b>${count}</div>`
+    );
+  }
+  slot.hidden = false;
+  syncBlackWeekHeaderOffset();
+  startBlackWeekCountdown();
+}
+
+function renderBlackWeekPromoEntry() {
+  const promo = document.getElementById('blackWeekPromo');
+  if (promo) {
+    promo.hidden = true;
+    promo.innerHTML = '';
+  }
+  renderBlackWeekHeaderBar();
 }
 
 function renderProductsFromAPI({ force = false } = {}) {
@@ -5031,9 +6461,11 @@ function renderProductsFromAPI({ force = false } = {}) {
       ? ensureFreeTrialCategoryItem()
       : activeLandingRoute?.componentName === 'LandingFirstClimb'
         ? ensureFirstClimbCategoryItem()
-        : activeLandingRoute?.componentName === 'LandingFirstMonthFree'
-          ? document.querySelector('[data-category="campaign"]')
-          : document.querySelector('[data-category="membership"]');
+        : activeLandingRoute?.componentName === 'LandingBlackWeek'
+          ? document.querySelector('[data-category="blackweek"]')
+          : activeLandingRoute?.componentName === 'LandingFirstMonthFree'
+            ? document.querySelector('[data-category="campaign"]')
+            : document.querySelector('[data-category="membership"]');
     if (targetCategory) {
       targetCategory.style.display = '';
       targetCategory.classList.add('expanded', 'selected');
@@ -5087,6 +6519,16 @@ function renderProductsFromAPI({ force = false } = {}) {
     renderLandingCards((products || []).slice(0, 1));
     devLog('[Landing Route] Rendering LandingFirstClimb');
   };
+  const LandingBlackWeek = () => {
+    hideNonLandingCategories();
+    renderBlackWeekPromoEntry(); // ensures main-catalog promo stays hidden on this route
+    // Prefer products already split into state.blackWeekProducts; fall back to landing matches.
+    if (!Array.isArray(state.blackWeekProducts) || state.blackWeekProducts.length === 0) {
+      state.blackWeekProducts = (landingMatchedProducts || []).filter((p) => isBlackWeekProduct(p));
+    }
+    renderBlackWeekCategory({ landingMode: true });
+    devLog('[Landing Route] Rendering LandingBlackWeek');
+  };
   if (shouldRenderLandingRoute) {
     if (activeLandingRoute.componentName === 'LandingFreeTrial') {
       LandingFreeTrial(landingMatchedProducts);
@@ -5094,6 +6536,8 @@ function renderProductsFromAPI({ force = false } = {}) {
       LandingFirstMonthFree(landingMatchedProducts);
     } else if (activeLandingRoute.componentName === 'LandingFirstClimb') {
       LandingFirstClimb(landingMatchedProducts);
+    } else if (activeLandingRoute.componentName === 'LandingBlackWeek') {
+      LandingBlackWeek();
     } else {
       devWarn('[Landing Route] Unknown component name:', activeLandingRoute.componentName);
     }
@@ -5112,6 +6556,12 @@ function renderProductsFromAPI({ force = false } = {}) {
   }
   const categoryItems = document.querySelectorAll('.category-item');
   categoryItems.forEach((item) => {
+    // Keep Black Week hidden until renderBlackWeekCategory decides to show it.
+    if (item.dataset.category === 'blackweek') {
+      item.style.display = 'none';
+      item.dataset.landingLocked = '';
+      return;
+    }
     item.style.display = '';
     item.dataset.landingLocked = '';
   });
@@ -5243,6 +6693,17 @@ function renderProductsFromAPI({ force = false } = {}) {
       if (messageP) messageP.textContent = t('message.noProducts.punchcard');
     }
   }
+
+  // Main catalog: promo door only (full shop lives on /black-week)
+  const bwHost = document.querySelector('[data-category="blackweek"]');
+  if (bwHost) {
+    bwHost.style.display = 'none';
+    const root = bwHost.querySelector('[data-bw-shop-root]');
+    if (root) root.innerHTML = '';
+  }
+  removeBlackWeekStickyBar();
+  document.body.classList.remove('blackweek-flow');
+  renderBlackWeekPromoEntry();
   
   // Re-setup event listeners and translations in one batched frame to avoid visible double-render.
   scheduleAccessStepRebind();
@@ -5278,6 +6739,33 @@ async function loadSubscriptionAdditions(productId) {
 let userLocation = null;
 let gymsWithDistances = [];
 
+// Placeholder rows while the first gym list is on its way. One row per baked-in
+// gym, so the page below the list stays where it is when the real rows arrive.
+// Only fills an empty list: later reloads (language switch, distance sort) keep
+// the gyms that are already on screen.
+function renderGymListSkeleton() {
+  const gymList = document.querySelector('.gym-list');
+  if (!gymList || gymList.children.length > 0) return;
+  const row = `
+    <div class="gym-skeleton" aria-hidden="true">
+      <div class="gym-info">
+        <div class="gym-name"><span class="skeleton skeleton--md"></span></div>
+        <div class="gym-details">
+          <div class="gym-address">
+            <div class="gym-address-street"><span class="skeleton skeleton--md"></span></div>
+            <div class="gym-address-postal-city"><span class="skeleton skeleton--sm"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="check-circle"></div>
+    </div>`;
+  gymList.innerHTML = sanitizeHTML(
+    `<span class="visually-hidden">${t('modal.loading')}</span>${row.repeat(BUSINESS_UNITS_FALLBACK.length)}`
+  );
+  // An earlier failed load may have left its message under the list.
+  document.getElementById('noResults')?.classList.add('hidden');
+}
+
 // Load gyms from API and update UI
 async function loadGymsFromAPI({ forceNetwork = false } = {}) {
   const now = Date.now();
@@ -5310,6 +6798,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
       clearTimeout(gymLoadRetryTimeoutId);
       gymLoadRetryTimeoutId = null;
     }
+    renderGymListSkeleton();
     const response = await businessUnitsAPI.getBusinessUnits({ forceNetwork });
     
     // Handle different response formats - could be array or object with data property
@@ -5328,6 +6817,9 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
     
     // Clear existing gym list
     const gymList = document.querySelector('.gym-list');
+    // Placeholder rows already hold the list's place, so the gyms that replace
+    // them appear in place rather than fading in over a list that just emptied.
+    const replacingSkeleton = Boolean(gymList?.querySelector('.gym-skeleton'));
     if (gymList) {
       gymList.innerHTML = '';
     }
@@ -5436,7 +6928,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (existingData && existingData.oldIndex !== i) {
           // Item moved - add animation class
           gymItem.classList.add('reordering');
-        } else if (!existingData) {
+        } else if (!existingData && !replacingSkeleton) {
           // New item - fade in with staggered delay
           gymItem.classList.add('fade-in');
           gymItem.style.animationDelay = `${i * 0.05}s`;
@@ -6010,6 +7502,18 @@ const state = {
   landingRouteConfig: null, // Active landing route config for path-specific product surfacing
   membershipDeeplinkApplied: false, // /fitness or /single-gym cart deeplink already ran
   landingMatchedProducts: [], // Products matched by active landing route label
+  blackWeekProducts: [], // Black Week value cards (punch + coffee) when window is open
+  blackWeekPunchProductId: null,
+  blackWeekPunchQty: 0,
+  blackWeekPunchQtys: {},
+  blackWeekCoffeeProductId: null,
+  blackWeekCoffeeQty: 0,
+  blackWeekCoffeeQtys: {},
+  blackWeekRestoredCart: null, // Value card lines restored after a failed payment, until adoptRestoredBlackWeekCart() has put them in the maps above
+  blackWeekListTracked: false, // view_item_list fired for this page load
+  blackWeekReview: false,
+  blackWeekOwnedPunchCount: 0,
+  blackWeekOwnedCoffeeCount: 0,
   firstclimbGuardPromise: null, // Resolves when /99kr eligibility check completes (blocks navigation until done)
   isPaymentReturnFlow: false, // True when this page load is a return from the payment provider / success render — skips only the automatic /99kr eligibility check on load (the just-bought product would otherwise misfire the blocker on the confirmation page). Checkout-time guards are unaffected.
   currentAuthMode: null, // Track current auth mode (login/create)
@@ -7417,7 +8921,13 @@ function init() {
     document.body.classList.add('password-reset-route');
     initLanguageSwitcher();
     initPasswordResetPage();
+    renderBlackWeekHeaderBar();
     hideLoadingOverlay();
+    return;
+  }
+  // Outside the Black Week window, /black-week redirects to home (unless forceBlackWeek=1).
+  if (isBlackWeekRoute() && !isBlackWeekWindowOpen()) {
+    window.location.replace('/');
     return;
   }
   state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
@@ -7433,6 +8943,7 @@ function init() {
   // collapsed to the one category the route actually offers. The route is known
   // synchronously from the URL, so nothing needs to wait for the network.
   applyLandingRouteMarker();
+  renderBlackWeekHeaderBar();
 
   // firstclimb: block navigation/checkout until eligibility is verified for
   // authenticated arrivals. Non-authenticated users get a no-op promise; checkout
@@ -7452,6 +8963,38 @@ function init() {
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
     try { document.body.classList.add('firstclimb-flow'); } catch (_) {}
   }
+  if (state.landingRouteConfig?.componentName === 'LandingBlackWeek') {
+    try { document.body.classList.add('blackweek-flow'); } catch (_) {}
+  }
+
+  // Keep Black Week landing ↔ main catalog promo in sync with browser back/forward.
+  window.addEventListener('popstate', () => {
+    if (isPasswordResetRoute()) return;
+    if (isBlackWeekRoute() && !isBlackWeekWindowOpen()) {
+      window.location.replace('/');
+      return;
+    }
+    state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
+    applyLandingRouteMarker(state.landingRouteConfig);
+    if (typeof applyRouteIndexingPolicy === 'function') {
+      applyRouteIndexingPolicy(window.location.pathname);
+    }
+    document.body.classList.toggle(
+      'blackweek-flow',
+      state.landingRouteConfig?.componentName === 'LandingBlackWeek'
+    );
+    if (!state.landingRouteConfig) {
+      removeBlackWeekStickyBar();
+      document.body.classList.remove('blackweek-flow');
+    }
+    renderBlackWeekHeaderBar();
+    if (state.selectedBusinessUnit) {
+      renderProductsFromAPI({ force: true });
+    }
+    // Same as navigateBlackWeekSurface(): the cart follows the surface.
+    updateCartSummary();
+    if (typeof updateMainSubtitle === 'function') updateMainSubtitle();
+  });
 
   // Capture ?ref=<recruiter customer ID> early so it's stored before any
   // signup steps run. Persists in localStorage with a 30-day TTL; later
@@ -7540,6 +9083,7 @@ function syncHeaderHeight() {
   if (height > 0) {
     document.documentElement.style.setProperty('--header-height', `${height}px`);
   }
+  syncBlackWeekHeaderOffset();
 
   if (!headerHeightObserver && typeof ResizeObserver !== 'undefined') {
     headerHeightObserver = new ResizeObserver(() => syncHeaderHeight());
@@ -7707,7 +9251,18 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Medlemskabskampagne', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.membership.subtitle.limited': 'Løbende abonnement med automatisk betaling.', 'category.15daypass': 'Prøveperiode', 'category.15daypass.subtitle': '15 dages ubegrænset adgang. Klatresko inkluderet.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Fast lav pris pr. indgang. Kan deles med andre.',
+    'step.bw.gym': 'Hal', 'step.bw.cards': 'Kort', 'step.bw.pay': 'Betal',
+    'main.subtitle.step1.bw': 'Hvor vil du hente dine kort?', 'main.subtitle.step1.bw.secondary': 'Kortene er fysiske og gælder i alle 11 haller. Du henter dem i caféen.',
+    'category.campaign': 'Medlemskabskampagne', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.membership.subtitle.limited': 'Løbende abonnement med automatisk betaling.', 'category.15daypass': 'Prøveperiode', 'category.15daypass.subtitle': '15 dages ubegrænset adgang. Klatresko inkluderet.',     'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Fast lav pris pr. indgang. Kan deles med andre.',
+    'category.blackweek': 'Black Week', 'category.blackweek.subtitle': 'Klippekort med 13 klip for 10\'eres pris + kaffekort. Køb begge i samme ordre.',
+    'category.blackweek.desc': 'Vælg én klippekorttype (max 3 pr. profil) og tilføj eventuelt kaffekort (max 5 pr. profil). Tilbuddet gælder 23.–29. nov. 2026.',
+    'blackweek.cap.remaining': 'Tilbage: {punch} klippekort, {coffee} kaffekort.',
+    'blackweek.cap.exhausted': 'Du har nået Black Week-grænsen for denne profil.',
+    'blackweek.cap.punchExhausted': 'Du har nået grænsen for Black Week-klippekort.',
+    'blackweek.cap.coffeeExhausted': 'Du har nået grænsen for Black Week-kaffekort.',
+    'blackweek.cap.clamped': 'Antallet blev reduceret til din resterende Black Week-grænse.',
+    'blackweek.selectRequired': 'Vælg et klippekort og/eller kaffekort for at fortsætte.',
+    'message.noProducts.blackweek': 'Ingen Black Week-produkter er tilgængelige lige nu.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'membership.limitedAccess': 'Begrænset adgang',
     'membership.newBadge': 'Nyhed',
@@ -8069,6 +9624,22 @@ const translations = {
     'faq.punchcard.remainingClips.a': 'Hvis du stadig har klip på dit klippekort, men er klar til medlemskab, kan du få det ombyttet til medlemskab. For ombytning skal du sende en mail til medlem@boulders.dk. Eller giv det som gave til en, der fortjener det.',
     'faq.punchcard.multiple.q': 'Kan jeg have flere klippekort?',
     'faq.punchcard.multiple.a': 'Du kan have ubegrænset antal klippekort tilknyttet din profil.',
+    'faq.blackweek.punchCard.q': 'Hvordan virker Black Week-klippekortet?',
+    'faq.blackweek.punchCard.a': 'Du får 13 klip for 10\'eres pris. Ét klip giver én entré i alle Boulders-haller, i alle åbne timer. Kortet er gyldigt i 12 måneder fra købsdatoen.',
+    'faq.blackweek.coffeeCard.q': 'Hvordan virker kaffekortet?',
+    'faq.blackweek.coffeeCard.a': 'Et fysisk stempelkort med 11 valgfri varme drikke fra caféen — espresso, americano, cortado, cappuccino, café latte, flat white, te og varm kakao — i alle 11 haller. Under Black Week til halv pris. Kortet udløber ikke.',
+    'faq.blackweek.pickup.q': 'Hvordan får jeg mine kort?',
+    'faq.blackweek.pickup.a': 'Begge kort er fysiske. Du henter dem i caféen i den hal, du har valgt, og de kan bruges med det samme.',
+    'faq.blackweek.caps.q': 'Hvor mange kort kan jeg købe?',
+    'faq.blackweek.caps.a': 'Under Black Week kan du købe op til 3 klippekort og 5 kaffekort pr. person.',
+    'faq.blackweek.gift.q': 'Kan jeg give kortene i gave?',
+    'faq.blackweek.gift.a': 'Ja. Kortene er ikke personlige, så du kan dele dem eller give dem væk — f.eks. som julegave.',
+    'faq.blackweek.convert.q': 'Kan klippekortet konverteres til et medlemskab?',
+    'faq.blackweek.convert.a': 'Ja, altid — også hvis du har klip tilbage. Skriv til medlem@boulders.dk.',
+    'faq.blackweek.withdrawal.q': 'Kan jeg fortryde mit køb?',
+    'faq.blackweek.withdrawal.a': 'Du har 14 dages fortrydelsesret fra købsdagen, så længe kortet ikke er taget i brug. Skriv til medlem@boulders.dk.',
+    'faq.blackweek.period.q': 'Hvor længe gælder Black Week-priserne?',
+    'faq.blackweek.period.a': 'Tilbuddene gælder 23.–29. november. Kortene, du køber, gælder som beskrevet ovenfor — det er kun prisen, der er Black Week.',
     'faq.productChoice.difference.q': 'Hvad er forskellen mellem medlemskab, 15-dages pas og klippekort?',
     'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 12 måneder og kan deles med andre.',
     'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
@@ -8081,7 +9652,18 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
+    'step.bw.gym': 'Gym', 'step.bw.cards': 'Cards', 'step.bw.pay': 'Pay',
+    'main.subtitle.step1.bw': 'Where do you want to pick up your cards?', 'main.subtitle.step1.bw.secondary': 'The cards are physical and work in all 11 gyms. You pick them up at the café.',
     'category.campaign': 'Membership Campaign', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Start now and save big! Only 3 months commitment. No hidden fees. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and conditions</a> apply.', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.membership.subtitle.limited': 'Ongoing subscription with automatic payment.', 'category.15daypass': 'Trial Pass', 'category.15daypass.subtitle': '15 days unlimited access. Rental shoes included.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Fixed low price per entry. Can be shared with others.',
+    'category.blackweek': 'Black Week', 'category.blackweek.subtitle': 'Punch cards with 13 punches for the price of 10 + coffee cards. Buy both in one order.',
+    'category.blackweek.desc': 'Choose one punch card type (max 3 per profile) and optionally add coffee cards (max 5 per profile). Offer available 23–29 Nov 2026.',
+    'blackweek.cap.remaining': 'Remaining: {punch} punch card(s), {coffee} coffee card(s).',
+    'blackweek.cap.exhausted': 'You have reached the Black Week limit for this profile.',
+    'blackweek.cap.punchExhausted': 'Punch card limit reached for this profile.',
+    'blackweek.cap.coffeeExhausted': 'Coffee card limit reached for this profile.',
+    'blackweek.cap.clamped': 'Quantities were reduced to your remaining Black Week limit.',
+    'blackweek.selectRequired': 'Select a punch card and/or coffee card to continue.',
+    'message.noProducts.blackweek': 'No Black Week products available right now.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'membership.limitedAccess': 'Limited access',
     'membership.newBadge': 'New',
@@ -8445,6 +10027,22 @@ const translations = {
     'faq.punchcard.remainingClips.a': 'If you still have punches left but are ready for a membership, you can have it converted to a membership. To convert, email medlem@boulders.dk. Or give the remaining clips as a gift to someone who deserves it.',
     'faq.punchcard.multiple.q': 'Can I have multiple punch cards?',
     'faq.punchcard.multiple.a': 'Yes you can have unlimited punch cards on your profile.',
+    'faq.blackweek.punchCard.q': 'How does the Black Week punch card work?',
+    'faq.blackweek.punchCard.a': 'You get 13 punches for the price of 10. One punch is one entry to all Boulders gyms, during all open hours. The card is valid for 12 months from the purchase date.',
+    'faq.blackweek.coffeeCard.q': 'How does the coffee card work?',
+    'faq.blackweek.coffeeCard.a': 'A physical stamp card with 11 hot drinks of your choice from the café — espresso, americano, cortado, cappuccino, café latte, flat white, tea and hot chocolate — in all 11 gyms. Half price during Black Week. The card never expires.',
+    'faq.blackweek.pickup.q': 'How do I get my cards?',
+    'faq.blackweek.pickup.a': 'Both cards are physical. You pick them up at the café in the gym you\'ve chosen, and they can be used right away.',
+    'faq.blackweek.caps.q': 'How many cards can I buy?',
+    'faq.blackweek.caps.a': 'During Black Week you can buy up to 3 punch cards and 5 coffee cards per person.',
+    'faq.blackweek.gift.q': 'Can I give the cards as a gift?',
+    'faq.blackweek.gift.a': 'Yes. The cards are not personal, so you can share them or give them away — for example as a Christmas gift.',
+    'faq.blackweek.convert.q': 'Can the punch card be converted to a membership?',
+    'faq.blackweek.convert.a': 'Yes, always — even if you have punches left. Email medlem@boulders.dk.',
+    'faq.blackweek.withdrawal.q': 'Can I cancel my purchase?',
+    'faq.blackweek.withdrawal.a': 'You have a 14-day right of withdrawal from the day of purchase, as long as the card has not been used. Email medlem@boulders.dk.',
+    'faq.blackweek.period.q': 'How long do the Black Week prices last?',
+    'faq.blackweek.period.a': 'The offers run 23–29 November. The cards you buy are valid as described above — only the price is Black Week.',
     'faq.productChoice.difference.q': 'What is the difference between membership, 15-Day Trial Pass, and punch card?',
     'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15-Day Trial Pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 12 months, and can be shared with others.',
     'faq.productChoice.membershipBest.q': 'When should I choose membership?',
@@ -8834,6 +10432,15 @@ function updatePageTranslations() {
       translation = t('offer.membership.description');
     }
 
+    // Black Week step 1: the gym is where the physical cards are picked up,
+    // not a home gym.
+    const isBlackWeekLanding = activeLandingRoute?.componentName === 'LandingBlackWeek';
+    if (isBlackWeekLanding && key === 'main.subtitle.step1') {
+      translation = t('main.subtitle.step1.bw');
+    } else if (isBlackWeekLanding && key === 'main.subtitle.step1.secondary') {
+      translation = t('main.subtitle.step1.bw.secondary');
+    }
+
     // Simple placeholder substitution for dynamic translations.
     if (translation && translation.includes('{name}')) {
       const name = element.getAttribute('data-i18n-name');
@@ -8931,10 +10538,14 @@ function updatePageTranslations() {
     window.refreshSentryFeedbackWidget();
   }
   
-  // Update step labels
+  // Update step labels. Black Week names its steps after the cards: the gym is
+  // a pickup place, the middle step picks cards, the last one pays.
   const stepLabels = document.querySelectorAll('.step-label');
+  const isBlackWeekSteps = (state.landingRouteConfig || resolveLandingRouteConfig())?.componentName === 'LandingBlackWeek';
   stepLabels.forEach((label, index) => {
-    const stepKeys = ['step.homeGym', 'step.access', 'step.boost', 'step.send'];
+    const stepKeys = isBlackWeekSteps
+      ? ['step.bw.gym', 'step.bw.cards', 'step.boost', 'step.bw.pay']
+      : ['step.homeGym', 'step.access', 'step.boost', 'step.send'];
     if (stepKeys[index]) {
       label.textContent = t(stepKeys[index]);
     }
@@ -8945,6 +10556,7 @@ function updatePageTranslations() {
     'campaign': 'category.campaign',
     'membership': 'category.membership',
     '15daypass': 'category.15daypass',
+    'blackweek': 'category.blackweek',
     'punchcard': 'category.punchcard',
   };
   
@@ -8962,8 +10574,20 @@ function updatePageTranslations() {
     if (titleEl) {
       titleEl.textContent = t(resolvedTitleKey);
     }
+
+    const subtitleEl = document.querySelector(`[data-category="${category}"] .category-subtitle`);
+    if (subtitleEl) {
+      const subtitle = t(`${key}.subtitle`);
+      if (subtitle && subtitle !== `${key}.subtitle`) {
+        if (subtitle.includes('<a') || subtitle.includes('<span')) {
+          subtitleEl.innerHTML = sanitizeHTML(subtitle);
+        } else {
+          subtitleEl.textContent = subtitle;
+        }
+      }
+    }
     
-    const descEl = document.querySelector(`[data-category="${category}"] .category-description p`);
+    const descEl = document.querySelector(`[data-category="${category}"] .category-description p:not([data-blackweek-cap-status])`);
     if (descEl) {
       const desc = t(resolvedDescKey);
       if (desc) {
@@ -8975,6 +10599,10 @@ function updatePageTranslations() {
       }
     }
   });
+
+  if (isBlackWeekWindowOpen() && isBlackWeekShopMounted()) {
+    syncBlackWeekQuantityUI();
+  }
   
   // Update main subtitles
   updateMainSubtitle();
@@ -9340,6 +10968,7 @@ function refreshOpenFooterModals() {
     }
     clearDataPolicySearch();
   }
+  renderBlackWeekHeaderBar();
 }
 
 // Change language and reload products
@@ -10613,6 +12242,16 @@ async function handleLoginSubmit(event) {
           state.authenticatedEmail = customerData.email;
         }
         console.log('[login] Customer profile loaded:', customerData);
+
+        // Black Week: recount owned punch/coffee cards so qty steppers clamp to remaining caps
+        if (isBlackWeekWindowOpen()) {
+          try {
+            await refreshBlackWeekOwnedCaps(state.customerId || customerId);
+            syncBlackWeekQuantityUI();
+          } catch (capErr) {
+            console.warn('[login] Black Week cap refresh failed:', capErr);
+          }
+        }
         
         // Get display name for toast
         let displayName = resolveAuthenticatedDisplayId({
@@ -12394,7 +14033,7 @@ async function handleSaveAccount() {
     { id: 'email', name: 'Email' },
     { id: 'phoneNumber', name: 'Phone number' },
     { id: 'password', name: 'Password' },
-  ];
+  ].filter((field) => !isSkippedBlackWeekCreateField(field.id));
   
   const missingFields = [];
   requiredFields.forEach(field => {
@@ -12964,7 +14603,7 @@ function checkSaveAccountButtonState() {
     'email',
     'phoneNumber',
     'password',
-  ];
+  ].filter((fieldId) => !isSkippedBlackWeekCreateField(fieldId));
   
   let allFieldsFilled = true;
   requiredFields.forEach(fieldId => {
@@ -13512,6 +15151,9 @@ function setupFormFieldFocus() {
 }
 
 function handleGymSearch(event) {
+  // Gyms are still loading: nothing to filter yet, so "no results" would be wrong.
+  if (document.querySelector('.gym-list .gym-skeleton')) return;
+
   const searchTerm = event.target.value.toLowerCase();
   const gymItems = document.querySelectorAll('.gym-item');
   const noResults = document.getElementById('noResults');
@@ -14297,6 +15939,7 @@ function setupNewAccessStep() {
     campaign: 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last. By purchasing a campaign offer, you accept <a href="#">terms and Conditions</a>.',
     membership: 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. By signing up you accept <a href="#">terms and Conditions</a>.',
     '15daypass': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit. By purchasing a 15-Day Trial Pass, you accept <a href="#">terms and Conditions</a>.',
+    blackweek: 'Black Week: buy one punch card type (max 3 per profile) and coffee cards (max 5 per profile) in the same order. By purchasing, you accept <a href="#">terms and Conditions</a>.',
     punchcard: 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 12 months and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym. By purchasing a value card, you accept <a href="#">terms and Conditions</a>.'
   };
 
@@ -14380,6 +16023,8 @@ function setupNewAccessStep() {
       // Clear all punch card quantities when switching categories (but not when just re-initializing)
       // Only clear if user is actually switching categories, not during language change re-render
       state.valueCardQuantities.clear();
+      clearBlackWeekQty('punch');
+      clearBlackWeekQty('coffee');
       
       document.querySelectorAll('.plan-card').forEach(card => {
         card.classList.remove('selected', 'has-quantity', 'disabled');
@@ -14422,6 +16067,11 @@ function setupNewAccessStep() {
       const planId = card.dataset.plan;
       const categoryItem = card.closest('.category-item');
       const category = categoryItem.dataset.category;
+
+      // Black Week uses the dedicated shop UI (not plan-card selection).
+      if (category === 'blackweek') {
+        return;
+      }
       
       // Check if this card is already selected
       const isAlreadySelected = card.classList.contains('selected');
@@ -14441,6 +16091,8 @@ function setupNewAccessStep() {
       
       // Clear all punch card quantities when making a new selection
       state.valueCardQuantities.clear();
+      clearBlackWeekQty('punch');
+      clearBlackWeekQty('coffee');
       
       // Hide all quantity panels
       document.querySelectorAll('.quantity-panel').forEach(panel => {
@@ -14820,6 +16472,95 @@ function handleGlobalClick(event) {
     case 'toggle-addon': {
       const addonId = actionable.dataset.addonId;
       if (addonId) toggleAddon(addonId, actionable);
+      break;
+    }
+    case 'bw-qty': {
+      event.preventDefault();
+      event.stopPropagation();
+      if (actionable.classList.contains('dis')) break;
+      adjustBlackWeekProductQty(
+        actionable.dataset.productId,
+        actionable.dataset.kind === 'coffee' ? 'coffee' : 'punch',
+        Number(actionable.dataset.delta) || 0
+      );
+      // At quantity 0 the minus button folds away. If it held the focus, pass
+      // that to the plus button so a keyboard user stays on the control.
+      const control = actionable.closest('.bw-q');
+      if (control?.dataset.qty === '0' && document.activeElement === actionable) {
+        control.querySelector('.plus')?.focus();
+      }
+      break;
+    }
+    case 'bw-select-segment': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekSegmentSelect(actionable.dataset.productId);
+      break;
+    }
+    case 'bw-toggle-coffee': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekToggleCoffee(actionable.dataset.productId);
+      break;
+    }
+    case 'bw-change-gym': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekChangeGym();
+      break;
+    }
+    case 'bw-see-all': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekSeeAllProducts();
+      break;
+    }
+    case 'bw-open-storefront': {
+      event.preventDefault();
+      event.stopPropagation();
+      openBlackWeekStorefront();
+      break;
+    }
+    case 'bw-upsell-add': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekUpsellAdd();
+      break;
+    }
+    case 'bw-upsell-skip': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekUpsellSkip();
+      break;
+    }
+    case 'increment-blackweek-quantity': {
+      event.stopPropagation();
+      adjustBlackWeekQuantity(
+        actionable.dataset.planId,
+        actionable.dataset.blackweekKind || 'punch',
+        1
+      );
+      break;
+    }
+    case 'decrement-blackweek-quantity': {
+      event.stopPropagation();
+      adjustBlackWeekQuantity(
+        actionable.dataset.planId,
+        actionable.dataset.blackweekKind || 'punch',
+        -1
+      );
+      break;
+    }
+    case 'bw-review-back': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekReviewBack();
+      break;
+    }
+    case 'continue-blackweek': {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBlackWeekContinue();
       break;
     }
     case 'increment-quantity': {
@@ -17041,23 +18782,22 @@ function updateCartSummary() {
     }
   }
 
-  // Handle punch card selection
+  // Handle punch card selection (including Black Week punch + coffee in one cart)
   if (state.selectedProductType === 'punch-card' && state.selectedProductId) {
     state.valueCardQuantities.forEach((quantity, planId) => {
       if (quantity <= 0) return;
       
-      // Find the product by ID - check both the stored productId and planId format
-      const productId = state.selectedProductId || planId.replace('punch-', '');
+      // Resolve product from this cart line's planId (not only selectedProductId),
+      // so punch + coffee can both appear when bought together.
+      const lineProductId = typeof planId === 'string' && planId.startsWith('punch-')
+        ? planId.replace('punch-', '')
+        : planId;
       
-      // Check both regular and campaign value cards
-      const allValueCards = [
-        ...(state.valueCards || []),
-        ...(state.campaignValueCards || [])
-      ];
+      const allValueCards = getAllValueCardProducts();
       
       const valueCard = allValueCards.find(p => 
-        p.id === productId || 
-        p.id === parseInt(productId) ||
+        p.id === lineProductId || 
+        p.id === parseInt(lineProductId, 10) ||
         planId.includes(String(p.id))
       );
       
@@ -17135,8 +18875,12 @@ function updateCartSummary() {
   // Calculate cart total (subtotal - discount) - round to half krone
   state.totals.cartTotal = roundToHalfKrone(Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0)));
 
-  // Track add_to_cart if items were added (not just updated)
-  if (newCartItemCount > previousCartItemCount && window.GTM && window.GTM.trackAddToCart) {
+  // Track add_to_cart if items were added (not just updated). Black Week sends
+  // its own add/remove events per quantity change (trackBlackWeekQtyChange),
+  // valued at the card added — this one only sees a line appear and values it
+  // at the cart total.
+  const isBlackWeekTracking = state.landingRouteConfig?.componentName === 'LandingBlackWeek';
+  if (!isBlackWeekTracking && newCartItemCount > previousCartItemCount && window.GTM && window.GTM.trackAddToCart) {
     try {
       // Only track newly added items
       const newItems = items.slice(previousCartItemCount);
@@ -17265,6 +19009,10 @@ function renderCartItems() {
   } else {
     hideCampaignWarning();
   }
+
+  // The Black Week cart has its own rows, and has them when it is empty too:
+  // every Black Week card is listed there with a quantity control.
+  if (renderBlackWeekCartRows(createProductDescriptionInfo)) return;
 
   if (!state.cartItems || !state.cartItems.length) {
     DOM.cartItems.innerHTML = '';
@@ -19601,6 +21349,51 @@ async function handleCheckout() {
       if (guard.blocked) return;
     }
   }
+
+  // Black Week: one button. A buyer who is not logged in has their profile
+  // saved as part of this click — handleSaveAccount validates the short create
+  // form, creates the customer, and logs in (an existing email falls back to
+  // login). It shows its own messages, so when it ends without a login there
+  // is nothing to add here. It runs before the cap re-clamp below, which can
+  // then count the cards an existing customer already owns.
+  if (isBlackWeekCart() && !isUserAuthenticated()) {
+    // Only when the create form is the one on screen — in login mode the
+    // login button is the way in.
+    const createSection = document.querySelector('[data-auth-section="create"]');
+    if (createSection && createSection.offsetParent !== null) {
+      setCheckoutLoadingState(true);
+      try {
+        await handleSaveAccount();
+      } finally {
+        setCheckoutLoadingState(false);
+      }
+      if (!isUserAuthenticated()) return;
+    }
+  }
+
+  // Black Week: re-clamp punch/coffee qty against owned cards before creating the order
+  const blackWeekSelectionActive =
+    isBlackWeekWindowOpen()
+    && ((Number(state.blackWeekPunchQty) || 0) > 0 || (Number(state.blackWeekCoffeeQty) || 0) > 0);
+  if (blackWeekSelectionActive) {
+    const beforePunch = Number(state.blackWeekPunchQty) || 0;
+    const beforeCoffee = Number(state.blackWeekCoffeeQty) || 0;
+    await refreshBlackWeekOwnedCaps(state.customerId);
+    applyBlackWeekSelectionToCartState();
+    updateCartSummary();
+    const afterPunch = Number(state.blackWeekPunchQty) || 0;
+    const afterCoffee = Number(state.blackWeekCoffeeQty) || 0;
+    if (afterPunch + afterCoffee < 1) {
+      showToast(t('blackweek.cap.exhausted') || 'You have reached the Black Week limit for this profile.', 'error');
+      syncBlackWeekQuantityUI();
+      return;
+    }
+    if (afterPunch < beforePunch || afterCoffee < beforeCoffee) {
+      showToast(t('blackweek.cap.clamped') || 'Quantities were reduced to your remaining Black Week limit.', 'error');
+      syncBlackWeekQuantityUI();
+      return;
+    }
+  }
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
@@ -19608,8 +21401,10 @@ async function handleCheckout() {
   // Hide FAQ section when checkout starts
   updateFAQVisibility();
 
-  // GTM: Track begin_checkout event
-  if (window.GTM && window.GTM.trackBeginCheckout && state.cartItems && state.cartItems.length > 0) {
+  // GTM: Track begin_checkout event. On Black Week it fired already, on
+  // "Til kassen" (handleBlackWeekContinue) — here would be a second one.
+  const skipBeginCheckout = state.landingRouteConfig?.componentName === 'LandingBlackWeek';
+  if (!skipBeginCheckout && window.GTM && window.GTM.trackBeginCheckout && state.cartItems && state.cartItems.length > 0) {
     try {
       window.GTM.trackBeginCheckout(state.cartItems, state.totals.cartTotal, 'DKK');
     } catch (error) {
@@ -23278,6 +25073,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
             state.valueCardQuantities.set(planId, quantity);
             console.log('[Payment Failed] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
           });
+          // On the Black Week checkout the cards go back into its quantity maps.
+          adoptRestoredBlackWeekCart(punchCardItems);
         }
       }
       if (storedOrder.totals) {
@@ -23637,6 +25434,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                     state.valueCardQuantities.set(planId, quantity);
                     console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
                   });
+                  // On the Black Week checkout the cards go back into its quantity maps.
+                  adoptRestoredBlackWeekCart(punchCardItems);
                 }
               }
               if (storedOrder.totals) {
@@ -25673,6 +27472,7 @@ function validateForm(animate = false) {
 
   if (!skipPersonalValidation) {
     REQUIRED_FIELDS.forEach((fieldId) => {
+      if (isSkippedBlackWeekCreateField(fieldId)) return;
       const field = document.getElementById(fieldId);
       if (!field) return;
 
@@ -25852,7 +27652,86 @@ function applyFreeFlowCartUi() {
     discountSection.style.display = isFreeTrialSelected ? 'none' : '';
   }
 
+  applyBlackWeekCartUi();
+
   return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
+}
+
+// The Black Week cart's own wording and rows: "I alt" for the total, the
+// saving, the pickup gym, the pay button and the note under it. Runs last in
+// applyFreeFlowCartUi(), after the regular wording is set, so it only writes on
+// the Black Week checkout and only hides its own rows everywhere else. The
+// markup is in index.html; the layout and the hidden discount code field are in
+// styles.css under body.blackweek-flow.
+function applyBlackWeekCartUi() {
+  const isBlackWeek = isBlackWeekCart();
+  const isDa = isDaFallback();
+
+  const summary = document.querySelector('[data-bw-cart-summary]');
+  const note = document.querySelector('[data-bw-cart-note]');
+  const editBtn = document.querySelector('.summary-edit-btn');
+  const editLabel = editBtn?.querySelector('[data-summary-edit-label]');
+  const mini = document.querySelector('[data-bw-mini-summary]');
+
+  if (summary) summary.hidden = !isBlackWeek;
+  if (note) note.hidden = !isBlackWeek;
+  if (editLabel) editLabel.textContent = isBlackWeek ? (isDa ? 'Ret' : 'Edit') : '';
+  if (editBtn) editBtn.setAttribute('aria-label', isBlackWeek && isDa ? 'Ret kurv' : 'Edit cart');
+  if (mini) mini.hidden = true;
+  if (!isBlackWeek) return;
+
+  // On a phone the full cart sits below a long form; this line above the form
+  // is the cart at a glance, and tapping it goes back to the picker like "Ret".
+  if (mini) {
+    const rows = getBlackWeekCartRows().filter((row) => row.quantity > 0);
+    const punchQty = rows.reduce((sum, row) => sum + (row.kind === 'punch' ? row.quantity : 0), 0);
+    const coffeeQty = rows.reduce((sum, row) => sum + (row.kind === 'coffee' ? row.quantity : 0), 0);
+    const totalKr = rows.reduce((sum, row) => sum + row.totalKr, 0);
+    const parts = [];
+    if (punchQty) parts.push(isDa ? `${punchQty} klippekort` : `${punchQty} punch card${punchQty === 1 ? '' : 's'}`);
+    if (coffeeQty) parts.push(isDa ? `${coffeeQty} kaffekort` : `${coffeeQty} coffee card${coffeeQty === 1 ? '' : 's'}`);
+    mini.hidden = !parts.length;
+    if (parts.length) {
+      mini.querySelector('[data-bw-mini-text]').textContent = `${parts.join(' + ')} · ${formatBlackWeekKr(totalKr)}`;
+      mini.querySelector('[data-bw-mini-edit]').textContent = isDa ? 'Ret' : 'Edit';
+      mini.setAttribute('aria-label', isDa ? 'Ret kurv' : 'Edit cart');
+    }
+  }
+
+  const payNowLabel = DOM.payNow?.closest('.payment-overview-paynow-row')?.querySelector('.payment-label');
+  if (payNowLabel) payNowLabel.textContent = isDa ? 'I alt' : 'Total';
+  if (DOM.checkoutBtn) DOM.checkoutBtn.textContent = isDa ? 'Gå til betaling' : 'Go to payment';
+  if (note) {
+    note.textContent = isDa
+      ? 'Du sendes videre til vores sikre betalingsudbyder.'
+      : 'You will be sent on to our secure payment provider.';
+  }
+  if (!summary) return;
+
+  // The saving is counted from the normal prices the picker strikes through.
+  const savingKr = roundToHalfKrone(getBlackWeekCartRows().reduce((sum, row) => sum + row.savingKr, 0));
+  const saving = summary.querySelector('[data-bw-cart-saving]');
+  if (saving) {
+    saving.hidden = savingKr <= 0;
+    saving.querySelector('[data-bw-cart-saving-label]').textContent = isDa ? 'Du sparer' : 'You save';
+    saving.querySelector('[data-bw-cart-saving-amount]').textContent = formatBlackWeekKr(savingKr);
+  }
+
+  // The cards are picked up at the chosen gym. It replaces the "Hjemmehal" line
+  // the regular cart prints under its first item.
+  const gymId = state.selectedGymId || state.selectedBusinessUnit;
+  const gym = gymId ? gymsWithDistances.find((candidate) => String(candidate.id) === String(gymId)) : null;
+  const gymName = String(gym?.name || state.selectedGymName || '').trim();
+  const pickup = summary.querySelector('[data-bw-cart-pickup]');
+  if (pickup) {
+    pickup.hidden = !gymName;
+    pickup.querySelector('[data-bw-cart-pickup-label]').textContent = isDa ? 'Afhentes i' : 'Pick up at';
+    pickup.querySelector('[data-bw-cart-pickup-gym]').textContent = gymName;
+    const change = pickup.querySelector('[data-bw-cart-pickup-change]');
+    change.textContent = isDa ? 'Skift' : 'Change';
+    // Read on its own by a screen reader, "Skift" needs its object.
+    change.setAttribute('aria-label', isDa ? 'Skift hal' : 'Change gym');
+  }
 }
 
 function updateCheckoutButton() {
@@ -26367,7 +28246,16 @@ function prevStep() {
 }
 
 function showStep(stepNumber) {
-  
+  renderBlackWeekHeaderBar(stepNumber);
+  // Black Week sticky CTA only belongs on the access/product step.
+  const bwBar = document.getElementById('blackWeekShopBar');
+  if (bwBar) {
+    const showBwBar = stepNumber === 2
+      && isBlackWeekWindowOpen()
+      && isBlackWeekShopMounted();
+    bwBar.hidden = !showBwBar;
+  }
+
   DOM.stepPanels.forEach((panel, index) => {
     const isActive = index + 1 === stepNumber;
     panel.classList.toggle('active', isActive);
@@ -26487,6 +28375,8 @@ function showStep(stepNumber) {
                   state.valueCardQuantities.set(planId, quantity);
                   console.log('[showStep] Step 4 - Rebuilt valueCardQuantities:', planId, '=', quantity);
                 });
+                // On the Black Week checkout the cards go back into its quantity maps.
+                adoptRestoredBlackWeekCart(punchCardItems);
               }
             }
             if (storedOrder.totals) {
@@ -26866,8 +28756,12 @@ function updateNavigationButtons() {
 function updateMainSubtitle() {
   if (!DOM.mainSubtitle || !DOM.mainTitle) return;
 
+  // On Black Week the gym is where the physical cards are picked up, not a
+  // home gym, and step 1 says so.
+  const isBlackWeekFlow = state.landingRouteConfig?.componentName === 'LandingBlackWeek';
+
   const subtitles = {
-    1: t('main.subtitle.step1'),
+    1: t(isBlackWeekFlow ? 'main.subtitle.step1.bw' : 'main.subtitle.step1'),
     2: t('main.subtitle.step2'),
     3: t('main.subtitle.step3'),
     4: t('main.subtitle.step4'),
@@ -26875,12 +28769,12 @@ function updateMainSubtitle() {
   };
 
   DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? t('main.subtitle.step2');
-  
+
   // Update secondary subtitle for current step
   const secondarySubtitle = document.querySelector('.secondary-subtitle');
   if (secondarySubtitle) {
     if (state.currentStep === 1) {
-      secondarySubtitle.textContent = t('main.subtitle.step1.secondary');
+      secondarySubtitle.textContent = t(isBlackWeekFlow ? 'main.subtitle.step1.bw.secondary' : 'main.subtitle.step1.secondary');
     } else if (state.currentStep === 2) {
       secondarySubtitle.textContent = t('main.subtitle.step2.secondary');
     }
@@ -27855,6 +29749,16 @@ const FAQ_DATA = {
     { q: 'faq.firstclimb.validity.q', a: 'faq.firstclimb.validity.a' },
     { q: 'faq.firstclimb.howToUse.q', a: 'faq.firstclimb.howToUse.a' },
     { q: 'faq.firstclimb.afterDay.q', a: 'faq.firstclimb.afterDay.a' }
+  ],
+  blackweek: [
+    { q: 'faq.blackweek.punchCard.q', a: 'faq.blackweek.punchCard.a' },
+    { q: 'faq.blackweek.coffeeCard.q', a: 'faq.blackweek.coffeeCard.a' },
+    { q: 'faq.blackweek.pickup.q', a: 'faq.blackweek.pickup.a' },
+    { q: 'faq.blackweek.caps.q', a: 'faq.blackweek.caps.a' },
+    { q: 'faq.blackweek.gift.q', a: 'faq.blackweek.gift.a' },
+    { q: 'faq.blackweek.convert.q', a: 'faq.blackweek.convert.a' },
+    { q: 'faq.blackweek.withdrawal.q', a: 'faq.blackweek.withdrawal.a' },
+    { q: 'faq.blackweek.period.q', a: 'faq.blackweek.period.a' }
   ]
 };
 
@@ -27911,6 +29815,11 @@ function getActiveFAQs() {
   // firstclimb landing route: dedicated FAQ on every visible step.
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
     return ['firstclimb'];
+  }
+
+  // Black Week: campaign FAQ on the picker and the checkout; the gym FAQ stays on step 1.
+  if (state.landingRouteConfig?.componentName === 'LandingBlackWeek') {
+    return step === 1 ? ['gyms'] : ['blackweek'];
   }
 
   // Step 1: gym info only
