@@ -5631,7 +5631,9 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       title: names.label,
       // The punch count sits in the hint line, where it doesn't wrap the title.
       desc: names.hint ? `${names.hint} · ${isDa ? '13 klip' : '13 punches'}` : (isDa ? '13 klip' : '13 punches'),
-      pill: isDa ? '+3 klip' : '+3 punches',
+      // Next to "13 klip" in the hint, "+3 klip" read as 13+3. The pill states
+      // the deal itself instead.
+      pill: '13 for 10',
       price,
       was,
       qty,
