@@ -92,14 +92,14 @@ function setPaymentOutcome(outcome) {
 const CREATED_EMAILS_STORAGE_KEY = 'boulders_created_emails';
 
 /** Checkout order/customer snapshots survive the redirect to the payment portal. */
-const CHECKOUT_ORDER_STORAGE_KEY = CHECKOUT_ORDER_STORAGE_KEY;
-const CHECKOUT_CUSTOMER_STORAGE_KEY = CHECKOUT_CUSTOMER_STORAGE_KEY;
+const CHECKOUT_ORDER_STORAGE_KEY = 'boulders_checkout_order';
+const CHECKOUT_CUSTOMER_STORAGE_KEY = 'boulders_checkout_customer';
 
 /** Consent checkboxes persist so a returning user doesn't re-tick them. */
-const PRIVACY_CONSENT_STORAGE_KEY = PRIVACY_CONSENT_STORAGE_KEY;
-const PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY = PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY;
-const TERMS_CONSENT_STORAGE_KEY = TERMS_CONSENT_STORAGE_KEY;
-const TERMS_CONSENT_TIMESTAMP_STORAGE_KEY = TERMS_CONSENT_TIMESTAMP_STORAGE_KEY;
+const PRIVACY_CONSENT_STORAGE_KEY = 'boulders_privacy_consent';
+const PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY = 'boulders_privacy_consent_timestamp';
+const TERMS_CONSENT_STORAGE_KEY = 'boulders_terms_consent';
+const TERMS_CONSENT_TIMESTAMP_STORAGE_KEY = 'boulders_terms_consent_timestamp';
 
 function rememberCreatedEmail(email) {
   if (!email) return;
