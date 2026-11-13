@@ -3,14 +3,7 @@
 // Supports all HTTP methods (GET, POST, PUT, DELETE) for future implementation steps
 // Based on the legacy proxy implementation to maintain consistency
 
-// Allowed origins for CORS - production domains only
-const ALLOWED_ORIGINS = [
-  'https://join.boulders.dk',
-  'https://bouldersspaflow.pages.dev',
-  'http://localhost:5173', // Local development (Vite default)
-  'http://localhost:5174', // Local development (alternative port)
-  'http://localhost:4173', // Local preview
-];
+import { validateOrigin } from '../_shared/cors';
 
 // Allowed API path patterns for security
 // Using broader patterns to avoid breaking when backend adds new endpoints
@@ -36,29 +29,6 @@ const EDGE_CACHE_TTL_SECONDS = 15 * 60; // 15 minutes — gym list rarely change
 
 function isEdgeCacheablePath(path: string, method: string): boolean {
   return method === 'GET' && EDGE_CACHEABLE_PATHS.includes(path);
-}
-
-// Helper function to validate origin
-// Returns the origin if valid, null if invalid
-function validateOrigin(origin: string | null): string | null {
-  if (!origin) {
-    // For same-origin requests (no Origin header), allow but log
-    // This is common for same-origin requests from the same domain
-    return null;
-  }
-
-  // Check if origin is in allowed list
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    return origin;
-  }
-
-  // Check if it's a preview deployment (*.pages.dev)
-  if (origin.endsWith('.pages.dev')) {
-    return origin;
-  }
-
-  // Reject unknown origins for security
-  return null;
 }
 
 // Helper function to validate API path

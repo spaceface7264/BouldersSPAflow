@@ -16,13 +16,7 @@
 // keepalive and ignores the response. Official numbers come from the
 // morning BRP pull.
 
-const ALLOWED_ORIGINS = [
-  'https://join.boulders.dk',
-  'https://bouldersspaflow.pages.dev',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:4173',
-];
+import { validateOrigin, corsHeaders, jsonResponse } from '../../_shared/cors';
 
 const BRP_ORDER_URL = (orderId: string) => `https://api-join.boulders.dk/api/orders/${encodeURIComponent(orderId)}`;
 
@@ -56,31 +50,6 @@ interface LogPayload {
 
 function normalizeClickIdType(value: unknown): string | null {
   return ['gclid', 'fbclid', 'ttclid'].includes(String(value)) ? String(value) : null;
-}
-
-function validateOrigin(origin: string | null): string | null {
-  if (!origin) return null;
-  if (ALLOWED_ORIGINS.includes(origin)) return origin;
-  if (origin.endsWith('.pages.dev')) return origin;
-  return null;
-}
-
-function corsHeaders(origin: string | null): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-  };
-  if (origin) {
-    headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
-    headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
-  }
-  return headers;
-}
-
-function jsonResponse(body: unknown, status: number, origin: string | null): Response {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin) });
 }
 
 function clamp(value: unknown, max: number): string | null {
