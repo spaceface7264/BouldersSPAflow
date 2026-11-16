@@ -16604,8 +16604,7 @@ async function handleApplyDiscount() {
 
     const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
     const discountAmount = capCouponDiscountKr(deriveCouponDiscountKr(response, subtotal), subtotal);
-    const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
-    
+
     if (discountAmount > 0) {
       // Success - apply discount
       state.discountCode = discountCode;
@@ -20151,7 +20150,7 @@ async function handleCheckout() {
                   console.log('[checkout] ✅ Discount already exists on order, verifying amount...');
                   const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
                   const existingDiscountAmount = roundToHalfKrone(
-                    calculateOrderCouponDiscountKr(orderCheck, subtotal)
+                    capCouponDiscountKr(deriveCouponDiscountKr(orderCheck, subtotal), subtotal)
                   );
                   const orderTotalFromAPI = extractCurrencyOutKr(
                     orderCheck?.price?.amount ?? orderCheck?.price?.total ?? orderCheck?.price?.leftToPay
@@ -27252,7 +27251,8 @@ function detectValueCardAddon(addonId) {
 
   const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
 
-  devLog(`[checkout] Addon ${addonId} type detection:`, {
+  // Guarded so the payload (object + map) is only built when debugging.
+  if (debugEnabled) devLog(`[checkout] Addon ${addonId} type detection:`, {
     addonId,
     numericId,
     isInValueCards,

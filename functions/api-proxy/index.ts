@@ -54,7 +54,7 @@ export async function onRequest(context: any) {
   // Reject requests from unknown origins
   if (requestOrigin && !allowedOrigin) {
     console.warn('[API Proxy] Rejected request from unknown origin:', requestOrigin);
-    return jsonResponse({ error: 'Origin not allowed' }, 403, null, PROXY_CORS);
+    return jsonResponse({ error: 'Origin not allowed' }, 403, null);
   }
 
   // Handle CORS preflight requests
