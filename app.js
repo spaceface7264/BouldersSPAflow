@@ -9720,10 +9720,9 @@ function handleRejectionOption2() {
   hideCampaignRejectionModal();
   
   // Open email to support
-  const supportEmail = SUPPORT_EMAIL;
   const subject = encodeURIComponent('Campaign Purchase Issue');
   const body = encodeURIComponent('Hello,\n\nI tried to purchase a campaign membership but was told it\'s not available for my account. I believe this may be a mistake.\n\nCould you please help?\n\nThank you!');
-  window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+  window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -9983,8 +9982,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('[Payment Return] Payment error detected - showing failed message immediately');
         // Ensure step 5 is shown and all other steps are hidden
         state.currentStep = TOTAL_STEPS;
-        state.paymentFailed = true;
-        
+        setPaymentOutcome('failed');
+
       // Hide all step panels immediately (use direct DOM query since cacheDom might not have run yet)
       const stepPanels = document.querySelectorAll('.step-panel');
       const step5Panel = document.getElementById('step-5');
@@ -16604,11 +16603,7 @@ async function handleApplyDiscount() {
     }
 
     const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-    let discountAmount = calculateOrderCouponDiscountKr(response, subtotal);
-    if (discountAmount <= 0 && response?.discountAmount != null) {
-      discountAmount = extractCurrencyOutKr(response.discountAmount);
-    }
-    discountAmount = capCouponDiscountKr(discountAmount, subtotal);
+    const discountAmount = capCouponDiscountKr(deriveCouponDiscountKr(response, subtotal), subtotal);
     const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
     
     if (discountAmount > 0) {
@@ -20412,30 +20407,8 @@ async function handleCheckout() {
             for (const addonId of addonIdsArray) {
               try {
                 // Determine if addon is a value card or article
-                const {
-                  addon,
-                  numericId,
-                  isInValueCards,
-                  isInRawValueCards,
-                  hasValueCardType,
-                  hasValueCardFields,
-                  isValueCard,
-                } = detectValueCardAddon(addonId);
+                const { addon, numericId, isValueCard } = detectValueCardAddon(addonId);
 
-                console.log(`[checkout] Addon ${addonId} type detection:`, {
-                  addonId,
-                  numericId,
-                  isInValueCards,
-                  isInRawValueCards,
-                  hasValueCardType,
-                  hasValueCardFields,
-                  productType: addon?.productType || addon?.product?.productType,
-                  isValueCard,
-                  valueCardsCount: state.valueCards?.length || 0,
-                  valueCardIds: state.valueCards?.map(vc => vc.id) || [],
-                  allRawProductsCount: state.allRawProducts?.length || 0
-                });
-                
                 if (isValueCard) {
                   // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
                   let amountCents = getAddonPriceInCents(addon);
@@ -20688,11 +20661,13 @@ async function handleCheckout() {
                   console.warn('[checkout] ⚠️ NOTE: This may fail with 403 if order is in a state that prevents modification');
                 
                 // Try to fix with multiple strategies
-                const subscriptionUrl = buildApiUrl({
-                  baseUrl: orderAPI.baseUrl,
-                  useProxy: orderAPI.useProxy,
-                  path: `/api/ver3/orders/${state.orderId}/items/subscriptions`,
-                });
+                const subscriptionUrl = orderAPI.useProxy
+                  ? buildApiUrl({
+                      baseUrl: orderAPI.baseUrl,
+                      useProxy: orderAPI.useProxy,
+                      path: `/api/ver3/orders/${state.orderId}/items/subscriptions`,
+                    })
+                  : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
                 
                   const fixedOrder = await orderAPI._fixBackendPricingBug(
                     state.orderId,
@@ -21371,7 +21346,7 @@ async function handleCheckout() {
         await finalizePreliminaryZeroBalanceOrder(state.orderId, 'checkout-free-flow');
       }
       // Mark as confirmed so success-page guards do not trigger intermediate navigation artifacts.
-      state.paymentConfirmed = true;
+      setPaymentOutcome('confirmed');
       state.checkoutInProgress = false;
       updateFAQVisibility();
       setCheckoutLoadingState(false);
@@ -22813,7 +22788,7 @@ async function loadOrderForConfirmation(orderId) {
         // Even if showPaymentFailedMessage fails, don't show success page
         console.error('[Payment Return] ❌ Error in inner catch handler:', innerError);
         // At minimum, navigate to step 5 and show error state
-        state.paymentFailed = true;
+        setPaymentOutcome('failed');
         state.currentStep = TOTAL_STEPS;
         showStep(TOTAL_STEPS);
         releasePaymentReturnOverlay();
@@ -23733,7 +23708,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           }
           
           // Reset payment failed state and navigate to step 4
-          state.paymentFailed = false;
+          setPaymentOutcome('none');
           // Clean up payment-failed-active class and inline styles before navigating
           const stepContent = document.querySelector('.step-content');
           if (stepContent) {
@@ -23803,10 +23778,9 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         supportOption.addEventListener('click', () => {
           console.log('[Payment Failed] User clicked "Get Help"');
           // Open support email
-          const supportEmail = SUPPORT_EMAIL;
           const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
           const body = encodeURIComponent(`Hello,\n\nHej, jeg kunne ikke gennemføre købet af ordrenr. #${displayOrderId}.\n\nKan i hjælpe med at løse det?\n\nMange tak!`);
-          window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+          window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
         });
       }
     }, 100);
@@ -24560,7 +24534,6 @@ function renderConfirmationView() {
   const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
 
   if (freetrialActivationChangeCta && freetrialActivationChangeLink) {
-    const supportEmail = SUPPORT_EMAIL;
     const supportSubject = encodeURIComponent('Change of activation date - Free Trial');
     const supportBody = encodeURIComponent([
       'Hi Boulders team,',
@@ -24576,7 +24549,7 @@ function renderConfirmationView() {
       '',
       'Thanks in advance!'
     ].join('\n'));
-    freetrialActivationChangeLink.href = `mailto:${supportEmail}?subject=${supportSubject}&body=${supportBody}`;
+    freetrialActivationChangeLink.href = `mailto:${SUPPORT_EMAIL}?subject=${supportSubject}&body=${supportBody}`;
     freetrialActivationChangeLink.setAttribute('data-i18n-key', 'confirmation.freetrial.changeActivationCta');
     freetrialActivationChangeLink.textContent = t('confirmation.freetrial.changeActivationCta');
     freetrialActivationChangeCta.style.display = isFreeTrialFlow ? '' : 'none';
@@ -25447,7 +25420,7 @@ async function showDetailedReceipt() {
   if (businessUnit) {
     // Per BusinessUnitOut schema: companyNameForInvoice, address, company
     if (receiptSellerName) {
-      receiptSellerName.textContent = businessUnit.companyNameForInvoice || businessUnit.company?.name || businessUnit.name || 'Boulders ApS';
+      receiptSellerName.textContent = businessUnit.companyNameForInvoice || businessUnit.company?.name || businessUnit.name || RECEIPT_SELLER_FALLBACK.name;
     }
     
     if (receiptSellerAddress && businessUnit.address) {
@@ -27236,8 +27209,8 @@ function findAddon(id) {
 /**
  * An addon is added to the order as either a value card or an article, and BRP
  * has no single authoritative field for the distinction, so every available
- * signal is checked. The individual signals are returned too so checkout
- * logging can show why a call was routed the way it was.
+ * signal is checked. The signal breakdown is logged here so checkout logging
+ * can show why a call was routed the way it was.
  */
 function detectValueCardAddon(addonId) {
   const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
@@ -27277,15 +27250,23 @@ function detectValueCardAddon(addonId) {
     (addon.product && addon.product.valueCardType !== undefined)
   );
 
-  return {
-    addon,
+  const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+
+  devLog(`[checkout] Addon ${addonId} type detection:`, {
+    addonId,
     numericId,
     isInValueCards,
     isInRawValueCards,
     hasValueCardType,
     hasValueCardFields,
-    isValueCard: isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields,
-  };
+    productType: addon?.productType || addon?.product?.productType,
+    isValueCard,
+    valueCardsCount: state.valueCards?.length || 0,
+    valueCardIds: state.valueCards?.map(vc => vc.id) || [],
+    allRawProductsCount: state.allRawProducts?.length || 0,
+  });
+
+  return { addon, numericId, isValueCard };
 }
 
 // Extract price from addon (handles both subscription additions and boost products)

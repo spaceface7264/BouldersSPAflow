@@ -16,7 +16,7 @@
 // keepalive and ignores the response. Official numbers come from the
 // morning BRP pull.
 
-import { validateOrigin, corsHeaders, jsonResponse } from '../../_shared/cors';
+import { validateOrigin, corsHeaders, jsonResponse, classifyEnvironment } from '../../_shared/cors';
 
 const BRP_ORDER_URL = (orderId: string) => `https://api-join.boulders.dk/api/orders/${encodeURIComponent(orderId)}`;
 
@@ -199,8 +199,7 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
   const attributionFirst = body.attributionFirst || {};
   const clickIdType = normalizeClickIdType(attribution.click_id_type);
   const firstClickIdType = normalizeClickIdType(attributionFirst.click_id_type);
-  const environment = env.ENVIRONMENT ||
-    (origin && origin.endsWith('.pages.dev') ? 'preview' : origin?.includes('localhost') ? 'dev' : 'production');
+  const environment = classifyEnvironment(origin, env.ENVIRONMENT);
 
   const db = env.SALES_DB;
   const statements: D1PreparedStatement[] = [

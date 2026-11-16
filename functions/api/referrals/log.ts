@@ -16,7 +16,7 @@
 // Failures here must NEVER block signup. The client fires this
 // keepalive and ignores the response.
 
-import { validateOrigin, corsHeaders, jsonResponse } from '../../_shared/cors';
+import { validateOrigin, corsHeaders, jsonResponse, classifyEnvironment } from '../../_shared/cors';
 
 interface AttributionPayload {
   recruiterId: number | string;
@@ -105,9 +105,7 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
     subscriptionProductId: body.subscriptionProductId != null ? String(body.subscriptionProductId).slice(0, 50) : '',
     subscriptionProductName: clampString(body.subscriptionProductName, 200),
     sourceUrl: clampString(body.sourceUrl, 500),
-    environment:
-      env.ENVIRONMENT ||
-      (origin && origin.endsWith('.pages.dev') ? 'preview' : origin?.includes('localhost') ? 'dev' : 'production'),
+    environment: classifyEnvironment(origin, env.ENVIRONMENT),
     userAgent: clampString(request.headers.get('User-Agent'), 300),
   };
 

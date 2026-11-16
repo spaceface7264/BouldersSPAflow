@@ -3,7 +3,14 @@
 // Supports all HTTP methods (GET, POST, PUT, DELETE) for future implementation steps
 // Based on the legacy proxy implementation to maintain consistency
 
-import { validateOrigin } from '../_shared/cors';
+import { validateOrigin, corsHeaders, jsonResponse, type CorsOptions } from '../_shared/cors';
+
+// The proxy forwards every HTTP method and the Sentry distributed-tracing
+// headers for browser → proxy spans, unlike the POST-only log endpoints.
+const PROXY_CORS: CorsOptions = {
+  methods: 'GET, POST, PUT, DELETE, OPTIONS',
+  allowHeaders: 'Content-Type, Authorization, Accept-Language, sentry-trace, baggage',
+};
 
 // Allowed API path patterns for security
 // Using broader patterns to avoid breaking when backend adds new endpoints
@@ -36,19 +43,6 @@ function isValidApiPath(path: string): boolean {
   return ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(path));
 }
 
-// Security headers to add to all responses
-function getSecurityHeaders(origin: string): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    // Include Sentry distributed-tracing headers for browser → proxy spans
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language, sentry-trace, baggage',
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'DENY',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-  };
-}
-
 export async function onRequest(context: any) {
   const request = context.request;
   const url = new URL(request.url);
@@ -60,32 +54,16 @@ export async function onRequest(context: any) {
   // Reject requests from unknown origins
   if (requestOrigin && !allowedOrigin) {
     console.warn('[API Proxy] Rejected request from unknown origin:', requestOrigin);
-    return new Response(
-      JSON.stringify({ error: 'Origin not allowed' }),
-      {
-        status: 403,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Content-Type-Options': 'nosniff',
-        },
-      }
-    );
+    return jsonResponse({ error: 'Origin not allowed' }, 403, null, PROXY_CORS);
   }
-  
+
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
-    // For same-origin requests (no Origin header), return basic headers
-    const preflightHeaders: Record<string, string> = {
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-    };
-    
+    const preflightHeaders = corsHeaders(allowedOrigin, PROXY_CORS);
     if (allowedOrigin) {
-      Object.assign(preflightHeaders, getSecurityHeaders(allowedOrigin));
       preflightHeaders['Access-Control-Max-Age'] = '86400';
     }
-    
+
     return new Response(null, {
       status: 200,
       headers: preflightHeaders,
@@ -97,38 +75,12 @@ export async function onRequest(context: any) {
   const apiPath = url.searchParams.get('path');
 
   if (!apiPath) {
-    const errorHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Content-Type-Options': 'nosniff',
-    };
-    if (allowedOrigin) {
-      Object.assign(errorHeaders, getSecurityHeaders(allowedOrigin));
-    }
-    return new Response(
-      JSON.stringify({ error: 'API path is required' }),
-      {
-        status: 400,
-        headers: errorHeaders,
-      }
-    );
+    return jsonResponse({ error: 'API path is required' }, 400, allowedOrigin, PROXY_CORS);
   }
 
   // Validate API path for security
   if (!isValidApiPath(apiPath)) {
-    const invalidHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Content-Type-Options': 'nosniff',
-    };
-    if (allowedOrigin) {
-      Object.assign(invalidHeaders, getSecurityHeaders(allowedOrigin));
-    }
-    return new Response(
-      JSON.stringify({ error: 'Invalid API path' }),
-      {
-        status: 403,
-        headers: invalidHeaders,
-      }
-    );
+    return jsonResponse({ error: 'Invalid API path' }, 403, allowedOrigin, PROXY_CORS);
   }
 
   // Build the full API URL
@@ -177,14 +129,8 @@ export async function onRequest(context: any) {
   if (cacheKey && edgeCache) {
     const cachedResponse = await edgeCache.match(cacheKey);
     if (cachedResponse) {
-      const responseHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'X-Content-Type-Options': 'nosniff',
-        'X-Edge-Cache': 'HIT',
-      };
-      if (allowedOrigin) {
-        Object.assign(responseHeaders, getSecurityHeaders(allowedOrigin));
-      }
+      const responseHeaders = corsHeaders(allowedOrigin, PROXY_CORS);
+      responseHeaders['X-Edge-Cache'] = 'HIT';
       return new Response(await cachedResponse.text(), {
         status: cachedResponse.status,
         headers: responseHeaders,
@@ -215,40 +161,14 @@ export async function onRequest(context: any) {
     if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
       const contentLength = request.headers.get('Content-Length');
       if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_SIZE) {
-        const errorHeaders: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-Content-Type-Options': 'nosniff',
-        };
-        if (allowedOrigin) {
-          Object.assign(errorHeaders, getSecurityHeaders(allowedOrigin));
-        }
-        return new Response(
-          JSON.stringify({ error: 'Request body too large' }),
-          {
-            status: 413,
-            headers: errorHeaders,
-          }
-        );
+        return jsonResponse({ error: 'Request body too large' }, 413, allowedOrigin, PROXY_CORS);
       }
-      
+
       const bodyText = await request.text();
       if (bodyText.length > MAX_REQUEST_SIZE) {
-        const errorHeaders: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-Content-Type-Options': 'nosniff',
-        };
-        if (allowedOrigin) {
-          Object.assign(errorHeaders, getSecurityHeaders(allowedOrigin));
-        }
-        return new Response(
-          JSON.stringify({ error: 'Request body too large' }),
-          {
-            status: 413,
-            headers: errorHeaders,
-          }
-        );
+        return jsonResponse({ error: 'Request body too large' }, 413, allowedOrigin, PROXY_CORS);
       }
-      
+
       requestOptions.body = bodyText;
     }
 
@@ -265,13 +185,7 @@ export async function onRequest(context: any) {
     }
 
     // Return the response with CORS headers
-    const responseHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Content-Type-Options': 'nosniff',
-    };
-    if (allowedOrigin) {
-      Object.assign(responseHeaders, getSecurityHeaders(allowedOrigin));
-    }
+    const responseHeaders = corsHeaders(allowedOrigin, PROXY_CORS);
 
     if (cacheKey && edgeCache && response.status === 200) {
       const cacheEntry = new Response(JSON.stringify(jsonData), {
@@ -301,25 +215,9 @@ export async function onRequest(context: any) {
       name: error.name,
     });
     
-    // Return generic error message to client (don't leak internal details)
-    const errorResponseHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Content-Type-Options': 'nosniff',
-    };
-    if (allowedOrigin) {
-      Object.assign(errorResponseHeaders, getSecurityHeaders(allowedOrigin));
-    }
-    
-    return new Response(
-      JSON.stringify({
-        error: 'Internal server error',
-        // Don't expose error.message to prevent information leakage
-      }),
-      {
-        status: 500,
-        headers: errorResponseHeaders,
-      }
-    );
+    // Return generic error message to client (don't leak internal details;
+    // don't expose error.message to prevent information leakage)
+    return jsonResponse({ error: 'Internal server error' }, 500, allowedOrigin, PROXY_CORS);
   }
 }
 
