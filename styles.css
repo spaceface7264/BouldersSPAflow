@@ -11101,6 +11101,31 @@ main {
     color: #fafafa;
 }
 
+/* Mixed basket: several value-card products render as compact line items
+   instead of one hero row (renderConfirmationView adds the modifier when the
+   order holds more than one card product). */
+.confirmation-order-product-panel--list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.confirmation-order-product-panel--list .confirmation-order-product-row {
+    align-items: flex-start;
+}
+
+.confirmation-order-product-panel--list .confirmation-order-product-name {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.confirmation-order-product-panel--list .confirmation-order-product-price {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .confirmation-order-price-suffix {
     font-size: 13px;
     font-weight: 500;

@@ -9481,6 +9481,7 @@ const translations = {
     'confirmation.eyebrow.membership': 'Dit medlemskab',
     'confirmation.eyebrow.15daypass': 'Dit prøvepas',
     'confirmation.eyebrow.punchcard': 'Dit klippekort',
+    'confirmation.eyebrow.punchcard.multi': 'Dine kort',
     'confirmation.eyebrow.firstclimb': 'Din billet',
     'confirmation.perMonthShort': '/md.',
     'confirmation.totalToday': 'Total i dag',
@@ -9882,6 +9883,7 @@ const translations = {
     'confirmation.eyebrow.membership': 'Your membership',
     'confirmation.eyebrow.15daypass': 'Your trial pass',
     'confirmation.eyebrow.punchcard': 'Your punch card',
+    'confirmation.eyebrow.punchcard.multi': 'Your cards',
     'confirmation.eyebrow.firstclimb': 'Your ticket',
     'confirmation.perMonthShort': '/mo.',
     'confirmation.totalToday': 'Total today',
@@ -10343,6 +10345,7 @@ const translations = {
     'confirmation.eyebrow.membership': 'Deine Mitgliedschaft',
     'confirmation.eyebrow.15daypass': 'Dein Testpass',
     'confirmation.eyebrow.punchcard': 'Deine Stempelkarte',
+    'confirmation.eyebrow.punchcard.multi': 'Deine Karten',
     'confirmation.eyebrow.firstclimb': 'Dein Ticket',
     'confirmation.perMonthShort': '/Mon.',
     'confirmation.totalToday': 'Heute gesamt',
@@ -26780,6 +26783,28 @@ function createPurchaseItemElement() {
       const name = (group.items[0]?.product?.name || 'Klippekort').replace(/\s*\(\d+\)\s*$/, '');
       return group.count > 1 ? `${name} (${group.count} kort)` : name;
     };
+
+    // One product keeps the hero row; a mixed basket renders compact line
+    // items (styling via the --list modifier), a plural eyebrow, and hides
+    // the shared Antal/Gyldig til fields — a single count is redundant next
+    // to itemized lines, and a single date would claim every card expires
+    // with the first one.
+    const isItemizedCardList = cardGroups.length > 1;
+    document.getElementById('confirmationPunchCardSection')
+      ?.classList.toggle('confirmation-order-product-panel--list', isItemizedCardList);
+    const punchEyebrow = document.querySelector('#confirmationOrderSection [data-product-eyebrow="punch-card"]');
+    if (punchEyebrow) {
+      const eyebrowKey = isItemizedCardList
+        ? 'confirmation.eyebrow.punchcard.multi'
+        : 'confirmation.eyebrow.punchcard';
+      punchEyebrow.setAttribute('data-i18n-key', eyebrowKey);
+      punchEyebrow.textContent = t(eyebrowKey);
+    }
+    if (isItemizedCardList) {
+      const memberZoneEl = document.getElementById('confirmationMemberZone');
+      memberZoneEl?.querySelector('[data-member-field="punch-card"]')?.setAttribute('hidden', '');
+      memberZoneEl?.querySelector('[data-member-field="punch-card-expiry"]')?.setAttribute('hidden', '');
+    }
 
     if (punchCardType) {
       setConfirmationSummaryField(
