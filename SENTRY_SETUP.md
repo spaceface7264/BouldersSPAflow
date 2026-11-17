@@ -214,7 +214,7 @@ Current configuration:
 - **Error Sample Rate:** 100% (all errors captured)
 - **Performance Sample Rate:** 10% (10% of transactions tracked)
 
-To adjust, edit `sentry.config.js:46-49`
+To adjust, edit the inline `Sentry.init` in `index.html`
 
 ## Quotas and Limits
 
@@ -259,7 +259,7 @@ If you exceed limits:
 
 ### Errors not filtered properly
 
-Edit filter rules in `sentry.config.js:68-83`:
+Edit filter rules in the inline `Sentry.init` in `index.html` (`ignoreErrors`):
 
 ```javascript
 ignoreErrors: [

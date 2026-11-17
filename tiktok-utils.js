@@ -20,6 +20,8 @@ function formatContents(items = []) {
   }));
 }
 
+const TARKETING_PIXEL_ID = 'D8G6EKBC77UC2BMVQUQ0';
+
 const trackedPurchaseIds = new Set();
 
 /**
@@ -41,7 +43,7 @@ function trackCompletePayment(transactionId, items = [], value = 0, currency = '
     return;
   }
 
-  if (typeof window.ttq === 'undefined' || typeof window.ttq.track !== 'function') {
+  if (typeof window.ttq === 'undefined' || typeof window.ttq.instance !== 'function') {
     console.warn('[TikTok] CompletePayment: ttq not available');
     return;
   }
@@ -65,7 +67,9 @@ function trackCompletePayment(transactionId, items = [], value = 0, currency = '
         }],
   };
 
-  window.ttq.track('CompletePayment', payload);
+  // Send only to Tarketing's pixel. A global ttq.track() would also hit S360's
+  // pixel (loaded via GTM) and count these 15-day purchases as S360 conversions.
+  window.ttq.instance(TARKETING_PIXEL_ID).track('CompletePayment', payload);
   trackedPurchaseIds.add(txKey);
   console.log('[TikTok] CompletePayment tracked:', txKey, payload);
 }

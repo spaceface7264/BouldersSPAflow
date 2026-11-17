@@ -16,13 +16,7 @@
 // Failures here must NEVER block signup. The client fires this
 // keepalive and ignores the response.
 
-const ALLOWED_ORIGINS = [
-  'https://join.boulders.dk',
-  'https://bouldersspaflow.pages.dev',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:4173',
-];
+import { validateOrigin, corsHeaders, jsonResponse, classifyEnvironment } from '../../_shared/cors';
 
 interface AttributionPayload {
   recruiterId: number | string;
@@ -43,27 +37,6 @@ interface Env {
   ENVIRONMENT?: string;
 }
 
-function validateOrigin(origin: string | null): string | null {
-  if (!origin) return null;
-  if (ALLOWED_ORIGINS.includes(origin)) return origin;
-  if (origin.endsWith('.pages.dev')) return origin;
-  return null;
-}
-
-function corsHeaders(origin: string | null): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-  };
-  if (origin) {
-    headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
-    headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
-  }
-  return headers;
-}
-
 function isPositiveInteger(value: unknown): boolean {
   const n = Number(value);
   return Number.isInteger(n) && n > 0;
@@ -72,10 +45,6 @@ function isPositiveInteger(value: unknown): boolean {
 function clampString(value: unknown, max: number): string {
   if (typeof value !== 'string') return '';
   return value.slice(0, max);
-}
-
-function jsonResponse(body: unknown, status: number, origin: string | null): Response {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin) });
 }
 
 export async function onRequest(context: { request: Request; env: Env }): Promise<Response> {
@@ -136,9 +105,7 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
     subscriptionProductId: body.subscriptionProductId != null ? String(body.subscriptionProductId).slice(0, 50) : '',
     subscriptionProductName: clampString(body.subscriptionProductName, 200),
     sourceUrl: clampString(body.sourceUrl, 500),
-    environment:
-      env.ENVIRONMENT ||
-      (origin && origin.endsWith('.pages.dev') ? 'preview' : origin?.includes('localhost') ? 'dev' : 'production'),
+    environment: classifyEnvironment(origin, env.ENVIRONMENT),
     userAgent: clampString(request.headers.get('User-Agent'), 300),
   };
 
