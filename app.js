@@ -9482,6 +9482,7 @@ const translations = {
     'confirmation.eyebrow.15daypass': 'Dit prøvepas',
     'confirmation.eyebrow.punchcard': 'Dit klippekort',
     'confirmation.eyebrow.punchcard.multi': 'Dine kort',
+    'confirmation.eyebrow.purchase': 'Dit køb',
     'confirmation.summary.cardCount': '{count} kort',
     'confirmation.eyebrow.firstclimb': 'Din billet',
     'confirmation.perMonthShort': '/md.',
@@ -9885,6 +9886,7 @@ const translations = {
     'confirmation.eyebrow.15daypass': 'Your trial pass',
     'confirmation.eyebrow.punchcard': 'Your punch card',
     'confirmation.eyebrow.punchcard.multi': 'Your cards',
+    'confirmation.eyebrow.purchase': 'Your purchase',
     'confirmation.summary.cardCount': '{count} cards',
     'confirmation.eyebrow.firstclimb': 'Your ticket',
     'confirmation.perMonthShort': '/mo.',
@@ -10348,6 +10350,7 @@ const translations = {
     'confirmation.eyebrow.15daypass': 'Dein Testpass',
     'confirmation.eyebrow.punchcard': 'Deine Stempelkarte',
     'confirmation.eyebrow.punchcard.multi': 'Deine Karten',
+    'confirmation.eyebrow.purchase': 'Dein Kauf',
     'confirmation.summary.cardCount': '{count} Karten',
     'confirmation.eyebrow.firstclimb': 'Dein Ticket',
     'confirmation.perMonthShort': '/Mon.',
@@ -26817,9 +26820,16 @@ function createPurchaseItemElement() {
       ?.classList.toggle('confirmation-order-product-panel--list', isItemizedCardList);
     const punchEyebrow = document.querySelector('#confirmationOrderSection [data-product-eyebrow="punch-card"]');
     if (punchEyebrow) {
+      // Order items carry slim product objects that may lack the labels
+      // isBlackWeekCoffeeProduct needs, so fall back to the name.
+      const singleProduct = cardGroups[0]?.items[0]?.product;
+      const isCoffeeOnly = !isItemizedCardList &&
+        (isBlackWeekCoffeeProduct(singleProduct) || /kaffe|coffee/i.test(singleProduct?.name || ''));
       const eyebrowKey = isItemizedCardList
         ? 'confirmation.eyebrow.punchcard.multi'
-        : 'confirmation.eyebrow.punchcard';
+        : isCoffeeOnly
+          ? 'confirmation.eyebrow.purchase'
+          : 'confirmation.eyebrow.punchcard';
       punchEyebrow.setAttribute('data-i18n-key', eyebrowKey);
       punchEyebrow.textContent = t(eyebrowKey);
     }
