@@ -44,7 +44,6 @@ import {
 import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
 import { getErrorMessage, extractErrorFields } from './utils/errors.js';
-import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
 import { highlightFieldError } from './utils/dom.js';
 import { getApiConfig } from './utils/apiConfig.js';
 import {
@@ -59,6 +58,62 @@ import confetti from 'canvas-confetti';
 
 /** GoActive / BRP app id for Boulders. Required so reset emails link to boulders.goactivebooking.com/resetPassword. */
 const BOULDERS_GOACTIVE_APP_ID = 416;
+
+/** Support contact used by mailto links and receipt fallbacks (i18n copy spells it out separately). */
+const SUPPORT_EMAIL = 'medlem@boulders.dk';
+
+/** Seller details shown on the receipt when the business unit payload lacks them. */
+const RECEIPT_SELLER_FALLBACK = Object.freeze({
+  name: 'Boulders ApS',
+  address: 'Graham Bells Vej 18A, 8200 Aarhus DK',
+  cvr: '32777651',
+  phone: '+45 72100019',
+  email: SUPPORT_EMAIL,
+});
+
+/** BRP order status id for "Betalet" (paid). */
+const PAID_ORDER_STATUS_ID = 2;
+
+function isOrderPaidStatus(order) {
+  return order?.orderStatus?.name === 'Betalet' || order?.orderStatus?.id === PAID_ORDER_STATUS_ID;
+}
+
+/**
+ * The three payment flags are mutually exclusive; every transition must set
+ * all of them. 'none' clears all three (initial/reset state).
+ */
+function setPaymentOutcome(outcome) {
+  state.paymentConfirmed = outcome === 'confirmed';
+  state.paymentFailed = outcome === 'failed';
+  state.paymentPending = outcome === 'pending';
+}
+
+/** Emails already used for account creation, persisted across sessions. */
+const CREATED_EMAILS_STORAGE_KEY = 'boulders_created_emails';
+
+/** Checkout order/customer snapshots survive the redirect to the payment portal. */
+const CHECKOUT_ORDER_STORAGE_KEY = 'boulders_checkout_order';
+const CHECKOUT_CUSTOMER_STORAGE_KEY = 'boulders_checkout_customer';
+
+/** Consent checkboxes persist so a returning user doesn't re-tick them. */
+const PRIVACY_CONSENT_STORAGE_KEY = 'boulders_privacy_consent';
+const PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY = 'boulders_privacy_consent_timestamp';
+const TERMS_CONSENT_STORAGE_KEY = 'boulders_terms_consent';
+const TERMS_CONSENT_TIMESTAMP_STORAGE_KEY = 'boulders_terms_consent_timestamp';
+
+function rememberCreatedEmail(email) {
+  if (!email) return;
+  state.createdEmails.add(email);
+  try {
+    const storedEmails = JSON.parse(localStorage.getItem(CREATED_EMAILS_STORAGE_KEY) || '[]');
+    if (!storedEmails.includes(email)) {
+      storedEmails.push(email);
+      localStorage.setItem(CREATED_EMAILS_STORAGE_KEY, JSON.stringify(storedEmails));
+    }
+  } catch (e) {
+    console.warn('[Account] Could not store created email in localStorage:', e);
+  }
+}
 
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
@@ -127,6 +182,21 @@ function capCouponDiscountKr(discountAmount, subtotal) {
     return subtotal;
   }
   return discountAmount;
+}
+
+/** The code the user typed in the discount field wins over a previously stored code. */
+function resolveDiscountCodeToApply() {
+  const typed = DOM.discountInput && DOM.discountInput.value.trim();
+  return typed ? typed.toUpperCase() : state.discountCode;
+}
+
+/** Coupon amount in kr from an order/apply response, with the flat discountAmount field as fallback. */
+function deriveCouponDiscountKr(source, subtotal) {
+  let amount = calculateOrderCouponDiscountKr(source, subtotal);
+  if (amount <= 0 && source?.discountAmount != null) {
+    amount = extractCurrencyOutKr(source.discountAmount);
+  }
+  return amount;
 }
 
 /** Original / discount / pay-now breakdown for payment overview when a coupon is applied. */
@@ -2781,8 +2851,8 @@ class AuthAPI {
     
     try {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-      sessionStorage.removeItem('boulders_checkout_customer');
-      sessionStorage.removeItem('boulders_checkout_order');
+      sessionStorage.removeItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
+      sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
     } catch (error) {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
@@ -3718,7 +3788,7 @@ class OrderAPI {
           ? error.payload
           : JSON.stringify(error.payload);
         console.error(`[Step 7] Get order error (${error.status || 'unknown'}):`, payloadText || error);
-        if (isLocalDev && isRateLimitError(error)) {
+        if (isLocalDev && isRateLimitLikeError(error)) {
           const retryMs = getRetryDelayFromError(error);
           orderGetCooldownUntil = Date.now() + retryMs;
           console.warn(`[Step 7] getOrder rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
@@ -4205,7 +4275,7 @@ async function validateTokensOnLoad() {
     await authAPI.validateToken();
     console.log('[Step 6] Token validated successfully');
   } catch (error) {
-    const isRateLimit = isRateLimitError(error);
+    const isRateLimit = isRateLimitLikeError(error);
     if (isRateLimit) {
       const retryMs = getRetryDelayFromError(error);
       tokenValidationCooldownUntil = Date.now() + retryMs;
@@ -4220,7 +4290,7 @@ async function validateTokensOnLoad() {
         console.log('[Step 6] Token refreshed after validation failure');
         // Header auth indicator will be updated by refreshToken() function
       } catch (refreshError) {
-        const refreshRateLimited = isRateLimitError(refreshError);
+        const refreshRateLimited = isRateLimitLikeError(refreshError);
         if (refreshRateLimited) {
           const retryMs = getRetryDelayFromError(refreshError);
           tokenValidationCooldownUntil = Date.now() + retryMs;
@@ -5955,6 +6025,11 @@ const SUPPORTED_LANGUAGES = {
 
 const DEFAULT_LANGUAGE = 'da-DK';
 
+/** 'da-DK' -> 'da'. Defaults to the active UI language. */
+function getShortLanguageCode(language = state.language || DEFAULT_LANGUAGE) {
+  return String(language).split('-')[0];
+}
+
 function getStoredLanguage() {
   try {
     const stored = localStorage.getItem('selectedLanguage');
@@ -6228,7 +6303,7 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
       // Refresh UI after loading profile to show all fields
       refreshLoginUI();
     } catch (profileError) {
-      if (isLocalDevHost() && isRateLimitError(profileError)) {
+      if (isLocalDevHost() && isRateLimitLikeError(profileError)) {
         const retryMs = getRetryDelayFromError(profileError);
         customerSyncCooldownUntil = Date.now() + retryMs;
         console.warn(`[Auth] Customer profile request rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
@@ -7460,7 +7535,7 @@ function init() {
 
   // Initialize email tracking from localStorage
   try {
-    const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
+    const storedEmails = JSON.parse(localStorage.getItem(CREATED_EMAILS_STORAGE_KEY) || '[]');
     storedEmails.forEach(email => {
       if (email && typeof email === 'string') {
         state.createdEmails.add(email.toLowerCase().trim());
@@ -8820,7 +8895,7 @@ window.getProblemReportTags = getProblemReportTags;
 // Update all translations on the page
 function updatePageTranslations() {
   const lang = state.language || DEFAULT_LANGUAGE;
-  const langCode = String(lang).split('-')[0];
+  const langCode = getShortLanguageCode(lang);
   
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
@@ -9304,7 +9379,7 @@ function updateAddonModalTranslations() {
 
 // Refresh open footer modals when language changes (footer modals follow header language)
 function refreshOpenFooterModals() {
-  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const langCode = getShortLanguageCode();
   
   if (DOM.termsModal && DOM.termsModal.style.display === 'flex') {
     if (state.currentModalType === 'terms' && state.currentModalTab) {
@@ -9354,7 +9429,7 @@ async function changeLanguage(languageCode) {
   setStoredLanguage(languageCode);
   
   // Update HTML lang attribute
-  document.documentElement.lang = languageCode.split('-')[0]; // 'da-DK' -> 'da'
+  document.documentElement.lang = getShortLanguageCode(languageCode);
   
   // Update language switcher UI
   updateLanguageSwitcherUI();
@@ -9480,7 +9555,7 @@ function initLanguageSwitcher() {
   
   // Set initial language and UI (run every time)
   const currentLang = state.language || DEFAULT_LANGUAGE;
-  document.documentElement.lang = currentLang.split('-')[0];
+  document.documentElement.lang = getShortLanguageCode(currentLang);
   updateLanguageSwitcherUI();
   updatePageTranslations();
   
@@ -9645,10 +9720,9 @@ function handleRejectionOption2() {
   hideCampaignRejectionModal();
   
   // Open email to support
-  const supportEmail = 'medlem@boulders.dk';
   const subject = encodeURIComponent('Campaign Purchase Issue');
   const body = encodeURIComponent('Hello,\n\nI tried to purchase a campaign membership but was told it\'s not available for my account. I believe this may be a mistake.\n\nCould you please help?\n\nThank you!');
-  window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+  window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -9725,9 +9799,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
     if (hasPaymentError) {
       console.log('[Payment Return] Payment error detected - staying on confirmation until the failed state is ready');
-      state.paymentFailed = true;
-      state.paymentConfirmed = false;
-      state.paymentPending = false;
+      setPaymentOutcome('failed');
     }
   }
   
@@ -9781,9 +9853,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set product type for test mode - ensure state is set correctly
     state.testMode = true;
     state.testProductType = productType;
-    state.paymentConfirmed = true; // Set payment confirmed for test mode
-    state.paymentFailed = false;
-    state.paymentPending = false;
+    setPaymentOutcome('confirmed'); // test mode
     
     // Set product type for test mode
     if (productType === 'punch-card') {
@@ -9912,8 +9982,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('[Payment Return] Payment error detected - showing failed message immediately');
         // Ensure step 5 is shown and all other steps are hidden
         state.currentStep = TOTAL_STEPS;
-        state.paymentFailed = true;
-        
+        setPaymentOutcome('failed');
+
       // Hide all step panels immediately (use direct DOM query since cacheDom might not have run yet)
       const stepPanels = document.querySelectorAll('.step-panel');
       const step5Panel = document.getElementById('step-5');
@@ -10049,7 +10119,6 @@ function cacheDom() {
   DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
   // Find form-container that contains login-status (parent of login-status)
   DOM.loginFormContainerWrapper = DOM.loginStatus?.closest('.form-container');
-  DOM.authModeToggle = null; // Removed - using button in form instead
   DOM.forgotPasswordLink = document.querySelector('[data-action="forgot-password"]');
   DOM.forgotPasswordModal = document.getElementById('forgotPasswordModal');
   DOM.forgotPasswordForm = document.getElementById('forgotPasswordForm');
@@ -10132,16 +10201,16 @@ function setupEventListeners() {
     if (DOM.privacyConsent.checked) {
       try {
         const timestamp = new Date().toISOString(); // ISO 8601 format for API
-        localStorage.setItem('boulders_privacy_consent', 'true');
-        localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+        localStorage.setItem(PRIVACY_CONSENT_STORAGE_KEY, 'true');
+        localStorage.setItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
         console.log('[Privacy Consent] Saved to localStorage with timestamp:', timestamp);
       } catch (e) {
         console.warn('[Privacy Consent] Could not save to localStorage:', e);
       }
     } else {
       try {
-        localStorage.removeItem('boulders_privacy_consent');
-        localStorage.removeItem('boulders_privacy_consent_timestamp');
+        localStorage.removeItem(PRIVACY_CONSENT_STORAGE_KEY);
+        localStorage.removeItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY);
         console.log('[Privacy Consent] Removed from localStorage');
       } catch (e) {
         console.warn('[Privacy Consent] Could not remove from localStorage:', e);
@@ -10154,16 +10223,16 @@ function setupEventListeners() {
     if (DOM.termsConsent.checked) {
       try {
         const timestamp = new Date().toISOString(); // ISO 8601 format for API
-        localStorage.setItem('boulders_terms_consent', 'true');
-        localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+        localStorage.setItem(TERMS_CONSENT_STORAGE_KEY, 'true');
+        localStorage.setItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
         console.log('[Terms Consent] Saved to localStorage with timestamp:', timestamp);
       } catch (e) {
         console.warn('[Terms Consent] Could not save to localStorage:', e);
       }
     } else {
       try {
-        localStorage.removeItem('boulders_terms_consent');
-        localStorage.removeItem('boulders_terms_consent_timestamp');
+        localStorage.removeItem(TERMS_CONSENT_STORAGE_KEY);
+        localStorage.removeItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY);
         console.log('[Terms Consent] Removed from localStorage');
       } catch (e) {
         console.warn('[Terms Consent] Could not remove from localStorage:', e);
@@ -11587,7 +11656,7 @@ function openTermsModal(termsType) {
     }
     
     // Convert language code (da-DK -> da, en-GB -> en)
-    const langCode = currentLang.split('-')[0];
+    const langCode = getShortLanguageCode(currentLang);
     const title = termsTitles[termsType] || 'Terms and Conditions';
     const content = termsContent[termsType]?.[langCode] || termsContent[termsType]?.da || '<p>Content not available.</p>';
     
@@ -11656,7 +11725,7 @@ function switchTermsTab(tabType) {
   
   // Load content for selected tab
   // Convert da-DK to da, en-GB to en for content lookup
-  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const langCode = getShortLanguageCode();
   const content = termsContent[tabType]?.[langCode] || termsContent[tabType]?.da || '<p>Content not available.</p>';
   
   if (termsContent[tabType]) {
@@ -11897,7 +11966,7 @@ function switchModalLanguage(modalType, lang) {
       
       // Store original content for search after language switch
       // Convert da-DK to da, en-GB to en for content lookup
-      const langCode = lang.split('-')[0];
+      const langCode = getShortLanguageCode(lang);
       const content = termsContent[currentTab]?.[langCode] || termsContent[currentTab]?.da || '';
       state.termsOriginalContent = content;
     } else {
@@ -11944,7 +12013,7 @@ function openDataPolicyModal() {
   
   updatePageTranslations();
   
-  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const langCode = getShortLanguageCode();
   const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
   
   DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
@@ -12349,11 +12418,6 @@ function refreshLoginUI() {
     }
   }
   
-  // Hide auth mode toggle when user is logged in
-  if (DOM.authModeToggle) {
-    DOM.authModeToggle.style.display = authenticated ? 'none' : '';
-  }
-  
   // Handle section visibility based on authentication state
   const createSection = document.querySelector('[data-auth-section="create"]');
   const loginSection = document.querySelector('[data-auth-section="login"]');
@@ -12533,7 +12597,7 @@ async function handleSaveAccount() {
     const privacyConsent = document.getElementById('privacyConsent');
     if (privacyConsent && privacyConsent.checked) {
       try {
-        const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
+        const privacyTimestamp = localStorage.getItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY);
         if (privacyTimestamp) {
           acceptedRegistrationTerms = privacyTimestamp;
         } else {
@@ -12672,19 +12736,7 @@ async function handleSaveAccount() {
     console.log('[Save Account] Customer creation response:', JSON.stringify(customer, null, 2));
     
     // Track this email as used for account creation
-    if (email) {
-      state.createdEmails.add(email);
-      // Also store in localStorage for persistence across sessions
-      try {
-        const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
-        if (!storedEmails.includes(email)) {
-          storedEmails.push(email);
-          localStorage.setItem('boulders_created_emails', JSON.stringify(storedEmails));
-        }
-      } catch (e) {
-        console.warn('[Save Account] Could not store email in localStorage:', e);
-      }
-    }
+    rememberCreatedEmail(email);
     
     // Extract customer ID from response
     const customerId = customer?.data?.id || customer?.id || customer?.customerId || customer?.data?.customerId;
@@ -13135,9 +13187,7 @@ function handleLogout() {
   state.subscriptionStartDate = null;
   state.discountCode = null;
   state.discountApplied = false;
-  state.paymentFailed = false;
-  state.paymentPending = false;
-  state.paymentConfirmed = false;
+  setPaymentOutcome('none');
   state.successAnimationPlayed = false;
 
   // IMPORTANT: Reset checkout/order context so a new user never reuses
@@ -13150,8 +13200,8 @@ function handleLogout() {
   state.valueCardQuantities.clear();
   state.createdEmails.clear();
   try {
-    sessionStorage.removeItem('boulders_checkout_customer');
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear checkout session snapshots on logout:', error);
   }
@@ -14886,7 +14936,7 @@ function handleGlobalClick(event) {
         openCheckoutConfirmModal();
         break;
       }
-      handleCheckoutClick();
+      handleCheckout();
       break;
     }
     case 'continue-value-cards': {
@@ -14966,7 +15016,7 @@ function handleGlobalClick(event) {
       event.preventDefault();
       state.checkoutConfirmAccepted = true;
       closeCheckoutConfirmModal();
-      handleCheckoutClick();
+      handleCheckout();
       break;
     }
     case 'close-activation-modal': {
@@ -16553,13 +16603,8 @@ async function handleApplyDiscount() {
     }
 
     const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-    let discountAmount = calculateOrderCouponDiscountKr(response, subtotal);
-    if (discountAmount <= 0 && response?.discountAmount != null) {
-      discountAmount = extractCurrencyOutKr(response.discountAmount);
-    }
-    discountAmount = capCouponDiscountKr(discountAmount, subtotal);
-    const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
-    
+    const discountAmount = capCouponDiscountKr(deriveCouponDiscountKr(response, subtotal), subtotal);
+
     if (discountAmount > 0) {
       // Success - apply discount
       state.discountCode = discountCode;
@@ -19085,7 +19130,7 @@ function persistOrderSnapshot(orderId) {
   try {
     const landingRoute = state.landingRouteConfig?.labelKey
       || (isFirstClimbRoute() ? 'firstclimb' : null);
-    sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
+    sessionStorage.setItem(CHECKOUT_ORDER_STORAGE_KEY, JSON.stringify({
       orderId,
       orderCreatedAt: state.orderCreatedAt,
       orderCreatedDate: state.orderCreatedDate,
@@ -19127,7 +19172,7 @@ function clearStoredOrderData(reason = 'manual') {
   };
 
   try {
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear order session data:', error);
   }
@@ -19182,7 +19227,7 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   updateDiscountDisplay();
 
   try {
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear order session data:', error);
   }
@@ -19301,7 +19346,7 @@ function invalidateCheckoutOrder(reason = 'stale') {
   state.paymentLinkGenerated = false;
   state.discountApplied = false; // coupon must be re-applied to the new order
   try {
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear order session data:', error);
   }
@@ -19494,10 +19539,6 @@ async function autoEnsureOrderIfReady(context = 'auto') {
   }
 }
 
-function isRateLimitError(error) {
-  return isRateLimitLikeError(error);
-}
-
 function getRetryDelayFromError(error, defaultMs = 120000) {
   // Default to 2 minutes (120 seconds) if we can't extract retryAfter.
   // Prefer error.payload (set by requestJson) over parsing error.message.
@@ -19532,10 +19573,6 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
   }
 
   return defaultMs;
-}
-
-function handleCheckoutClick() {
-  handleCheckout();
 }
 
 async function handleCheckout() {
@@ -19692,8 +19729,8 @@ async function handleCheckout() {
         let acceptedRegistrationTerms = null;
         if (payload.consent?.privacy || payload.consent?.terms) {
           try {
-            const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
-            const termsTimestamp = localStorage.getItem('boulders_terms_consent_timestamp');
+            const privacyTimestamp = localStorage.getItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY);
+            const termsTimestamp = localStorage.getItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY);
             // Use the earliest timestamp if both are present, otherwise use whichever is available
             if (privacyTimestamp && termsTimestamp) {
               acceptedRegistrationTerms = privacyTimestamp < termsTimestamp ? privacyTimestamp : termsTimestamp;
@@ -19779,16 +19816,7 @@ async function handleCheckout() {
             customer = await authAPI.createCustomer(customerData);
             
             // Track this email as used
-            state.createdEmails.add(email);
-            try {
-              const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
-              if (!storedEmails.includes(email)) {
-                storedEmails.push(email);
-                localStorage.setItem('boulders_created_emails', JSON.stringify(storedEmails));
-              }
-            } catch (e) {
-              console.warn('[checkout] Could not store email in localStorage:', e);
-            }
+            rememberCreatedEmail(email);
           }
         } else {
           customer = await authAPI.createCustomer(customerData);
@@ -19802,7 +19830,7 @@ async function handleCheckout() {
         state.customerId = customerId;
         // Store customer data in sessionStorage for payment return
         try {
-          sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
+          sessionStorage.setItem(CHECKOUT_CUSTOMER_STORAGE_KEY, JSON.stringify({
             id: customerId,
             ...buildStoredCheckoutCustomer(payload.customer),
           }));
@@ -19990,7 +20018,7 @@ async function handleCheckout() {
                 }
               }
               try {
-                sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
+                sessionStorage.setItem(CHECKOUT_CUSTOMER_STORAGE_KEY, JSON.stringify({
                   id: customerId,
                   ...buildStoredCheckoutCustomer(payload.customer),
                 }));
@@ -20096,9 +20124,7 @@ async function handleCheckout() {
           
           // CRITICAL: Apply coupon BEFORE generating payment link
           // This ensures the payment portal shows the discounted price
-          const discountCodeToApply = (DOM.discountInput && DOM.discountInput.value.trim()) 
-            ? DOM.discountInput.value.trim().toUpperCase()
-            : state.discountCode;
+          const discountCodeToApply = resolveDiscountCodeToApply();
           
           // Apply discount if we have a code and an order, even if already marked as applied
           // We need to ensure it's actually on the order before generating payment link
@@ -20124,7 +20150,7 @@ async function handleCheckout() {
                   console.log('[checkout] ✅ Discount already exists on order, verifying amount...');
                   const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
                   const existingDiscountAmount = roundToHalfKrone(
-                    calculateOrderCouponDiscountKr(orderCheck, subtotal)
+                    capCouponDiscountKr(deriveCouponDiscountKr(orderCheck, subtotal), subtotal)
                   );
                   const orderTotalFromAPI = extractCurrencyOutKr(
                     orderCheck?.price?.amount ?? orderCheck?.price?.total ?? orderCheck?.price?.leftToPay
@@ -20158,11 +20184,9 @@ async function handleCheckout() {
                 console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
 
                 const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-                let discountAmount = calculateOrderCouponDiscountKr(discountResponse, subtotal);
-                if (discountAmount <= 0 && discountResponse?.discountAmount != null) {
-                  discountAmount = extractCurrencyOutKr(discountResponse.discountAmount);
-                }
-                discountAmount = roundToHalfKrone(capCouponDiscountKr(discountAmount, subtotal));
+                const discountAmount = roundToHalfKrone(
+                  capCouponDiscountKr(deriveCouponDiscountKr(discountResponse, subtotal), subtotal)
+                );
 
               if (discountAmount > 0) {
                 state.discountCode = discountCodeToApply;
@@ -20382,61 +20406,8 @@ async function handleCheckout() {
             for (const addonId of addonIdsArray) {
               try {
                 // Determine if addon is a value card or article
-                // CRITICAL: Check if product ID exists in valueCards array (most reliable method)
-                // Value cards are loaded separately via /api/products/valuecards endpoint
-                const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
-                const addon = findAddon(addonId);
-                
-                // Primary method: Check if product ID exists in valueCards (both regular and campaign)
-                // This is the most reliable since value cards come from a different API endpoint
-                const allValueCards = [
-                  ...(state.valueCards || []),
-                  ...(state.campaignValueCards || [])
-                ];
-                const isInValueCards = allValueCards.some(vc => {
-                  const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
-                  return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
-                });
-                
-                // Also check allRawProducts (includes value cards before filtering)
-                const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
-                  const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
-                  return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
-                         (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
-                          // Check if it came from valueCards endpoint by checking if it's not a subscription
-                          (!p.priceWithInterval && !p.subscriptionInterval));
-                });
-                
-                // Secondary method: Check productType field if available
-                const hasValueCardType = addon && (
-                  addon.productType === 'VALUE_CARD' ||
-                  addon.productType === 'VALUECARD' ||
-                  (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
-                );
-                
-                // Tertiary method: Check if it's from valueCards API endpoint (has value card specific fields)
-                const hasValueCardFields = addon && (
-                  addon.valueCardType !== undefined ||
-                  addon.validUntil !== undefined ||
-                  (addon.product && addon.product.valueCardType !== undefined)
-                );
-                
-                const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
-                
-                console.log(`[checkout] Addon ${addonId} type detection:`, {
-                  addonId,
-                  numericId,
-                  isInValueCards,
-                  isInRawValueCards,
-                  hasValueCardType,
-                  hasValueCardFields,
-                  productType: addon?.productType || addon?.product?.productType,
-                  isValueCard,
-                  valueCardsCount: state.valueCards?.length || 0,
-                  valueCardIds: state.valueCards?.map(vc => vc.id) || [],
-                  allRawProductsCount: state.allRawProducts?.length || 0
-                });
-                
+                const { addon, numericId, isValueCard } = detectValueCardAddon(addonId);
+
                 if (isValueCard) {
                   // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
                   let amountCents = getAddonPriceInCents(addon);
@@ -20689,13 +20660,13 @@ async function handleCheckout() {
                   console.warn('[checkout] ⚠️ NOTE: This may fail with 403 if order is in a state that prevents modification');
                 
                 // Try to fix with multiple strategies
-                // Build URL for subscription endpoint
-                let subscriptionUrl;
-                if (orderAPI.useProxy) {
-                  subscriptionUrl = `${orderAPI.baseUrl}?path=/api/ver3/orders/${state.orderId}/items/subscriptions`;
-                } else {
-                  subscriptionUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
-                }
+                const subscriptionUrl = orderAPI.useProxy
+                  ? buildApiUrl({
+                      baseUrl: orderAPI.baseUrl,
+                      useProxy: orderAPI.useProxy,
+                      path: `/api/ver3/orders/${state.orderId}/items/subscriptions`,
+                    })
+                  : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
                 
                   const fixedOrder = await orderAPI._fixBackendPricingBug(
                     state.orderId,
@@ -20930,7 +20901,7 @@ async function handleCheckout() {
           }
 
           // Report unexpected payment errors only (skip rate limits — handled as UX cooldown)
-          if (!isRateLimitError(error)) {
+          if (!isRateLimitLikeError(error)) {
             captureException(error, {
               tags: {
                 flow: 'checkout',
@@ -21080,36 +21051,8 @@ async function handleCheckout() {
           for (const addonId of state.addonIds) {
             try {
               // Determine if addon is a value card or article
-              const addon = findAddon(addonId);
-              const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
-              
-              // Check multiple sources to identify product type (consistent with membership checkout)
-              const isInValueCards = state.valueCards && state.valueCards.some(vc => {
-                const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
-                return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
-              });
-              
-              // Also check allRawProducts (includes value cards before filtering)
-              const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
-                const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
-                return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
-                       (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
-                        (!p.priceWithInterval && !p.subscriptionInterval));
-              });
-              
-              const hasValueCardType = addon && (
-                addon.productType === 'VALUE_CARD' ||
-                addon.productType === 'VALUECARD' ||
-                (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
-              );
-              const hasValueCardFields = addon && (
-                addon.valueCardType !== undefined ||
-                addon.validUntil !== undefined ||
-                (addon.product && addon.product.valueCardType !== undefined)
-              );
-              
-              const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
-              
+              const { numericId, isValueCard } = detectValueCardAddon(addonId);
+
               if (isValueCard) {
                 await orderAPI.addValueCardItem(state.orderId, numericId, 1, null);
               } else {
@@ -21220,9 +21163,7 @@ async function handleCheckout() {
         console.log('[checkout] Coupon already applied, skipping duplicate application');
       } else {
         // Fallback: Apply coupon if it wasn't applied before payment link generation
-        const discountCodeToApply = (DOM.discountInput && DOM.discountInput.value.trim()) 
-          ? DOM.discountInput.value.trim().toUpperCase()
-          : state.discountCode;
+        const discountCodeToApply = resolveDiscountCodeToApply();
         
         if (discountCodeToApply && state.orderId) {
           try {
@@ -21235,10 +21176,7 @@ async function handleCheckout() {
             console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
             
             const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-            let discountAmount = calculateOrderCouponDiscountKr(discountResponse, subtotal);
-            if (discountAmount <= 0 && discountResponse?.discountAmount != null) {
-              discountAmount = extractCurrencyOutKr(discountResponse.discountAmount);
-            }
+            let discountAmount = deriveCouponDiscountKr(discountResponse, subtotal);
 
             if (!discountAmount) {
               try {
@@ -21407,7 +21345,7 @@ async function handleCheckout() {
         await finalizePreliminaryZeroBalanceOrder(state.orderId, 'checkout-free-flow');
       }
       // Mark as confirmed so success-page guards do not trigger intermediate navigation artifacts.
-      state.paymentConfirmed = true;
+      setPaymentOutcome('confirmed');
       state.checkoutInProgress = false;
       updateFAQVisibility();
       setCheckoutLoadingState(false);
@@ -21644,8 +21582,8 @@ window.exportPaymentDiagnostics = function() {
     orderId: state.orderId,
     customerId: state.customerId,
     sessionStorage: {
-      customer: sessionStorage.getItem('boulders_checkout_customer'),
-      order: sessionStorage.getItem('boulders_checkout_order'),
+      customer: sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY),
+      order: sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY),
     },
     state: {
       selectedBusinessUnit: state.selectedBusinessUnit,
@@ -22692,7 +22630,7 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
 
 function readStoredCheckoutOrder() {
   try {
-    const orderData = sessionStorage.getItem('boulders_checkout_order');
+    const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
     return orderData ? JSON.parse(orderData) : null;
   } catch (_) {
     return null;
@@ -22701,7 +22639,7 @@ function readStoredCheckoutOrder() {
 
 function readStoredCheckoutCustomer() {
   try {
-    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
     return customerData ? JSON.parse(customerData) : null;
   } catch (_) {
     return null;
@@ -22724,9 +22662,7 @@ async function loadOrderForConfirmation(orderId) {
   // But we still check for payment error params to determine if payment failed
   
   // CRITICAL: Reset payment status flags at start (only if no URL error)
-  state.paymentFailed = false;
-  state.paymentPending = false;
-  state.paymentConfirmed = false;
+  setPaymentOutcome('none');
   
   try {
     // Fix: Ensure orderId is numeric (handle cases where it might have path segments)
@@ -22746,8 +22682,8 @@ async function loadOrderForConfirmation(orderId) {
     let storedCustomer = null;
     let storedOrder = null;
     try {
-      const customerData = sessionStorage.getItem('boulders_checkout_customer');
-      const orderData = sessionStorage.getItem('boulders_checkout_order');
+      const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
+      const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
       if (customerData) {
         storedCustomer = JSON.parse(customerData);
         state.customerId = storedCustomer.id;
@@ -22824,9 +22760,7 @@ async function loadOrderForConfirmation(orderId) {
 
           state.orderId = orderId;
           state.order = buildOrderSummary(payload, summaryOrder, summaryCustomer);
-          state.paymentConfirmed = true;
-          state.paymentFailed = false;
-          state.paymentPending = false;
+          setPaymentOutcome('confirmed');
 
           state.currentStep = TOTAL_STEPS;
           showStep(TOTAL_STEPS);
@@ -22853,7 +22787,7 @@ async function loadOrderForConfirmation(orderId) {
         // Even if showPaymentFailedMessage fails, don't show success page
         console.error('[Payment Return] ❌ Error in inner catch handler:', innerError);
         // At minimum, navigate to step 5 and show error state
-        state.paymentFailed = true;
+        setPaymentOutcome('failed');
         state.currentStep = TOTAL_STEPS;
         showStep(TOTAL_STEPS);
         releasePaymentReturnOverlay();
@@ -22865,7 +22799,7 @@ async function loadOrderForConfirmation(orderId) {
     // If payment is not confirmed, show pending/failed right away (don't show success first)
     const initialLeftToPay = order.leftToPay?.amount ?? order.leftToPay ?? null;
     const initialOrderStatus = order.orderStatus?.name || order.status;
-    const initialIsPaid = order.orderStatus?.name === 'Betalet' || order.orderStatus?.id === 2;
+    const initialIsPaid = isOrderPaidStatus(order);
     
     console.log('[Payment Return] Initial payment check:', {
       leftToPay: initialLeftToPay,
@@ -23145,7 +23079,7 @@ async function loadOrderForConfirmation(orderId) {
     // This ensures we check the final state of the order after any updates
     const finalOrder = order; // Use the order object which may have been updated during polling
     const isPaymentConfirmed = finalOrder.leftToPay?.amount === 0 || finalOrder.leftToPay === 0;
-    const isOrderPaid = finalOrder.orderStatus?.name === 'Betalet' || finalOrder.orderStatus?.id === 2; // Assuming 2 is "Paid" status
+    const isOrderPaid = isOrderPaidStatus(finalOrder);
     
     console.log('[Payment Return] Final payment check:', {
       leftToPay: finalOrder.leftToPay?.amount || finalOrder.leftToPay,
@@ -23166,9 +23100,7 @@ async function loadOrderForConfirmation(orderId) {
     }
     
     // CRITICAL: Mark payment as confirmed to allow success page rendering
-    state.paymentConfirmed = true;
-    state.paymentFailed = false;
-    state.paymentPending = false;
+    setPaymentOutcome('confirmed');
     
     // Store full order object for payment overview (before building summary)
     state.fullOrder = order;
@@ -23252,8 +23184,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
   // CRITICAL: Restore cart and state from sessionStorage BEFORE showing failure page
   // This ensures cart is populated when user clicks "Try Payment Again"
   try {
-    const orderData = sessionStorage.getItem('boulders_checkout_order');
-    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
+    const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
     
     if (orderData) {
       const storedOrder = JSON.parse(orderData);
@@ -23414,9 +23346,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
   }
   
   // CRITICAL: Mark payment as failed FIRST to prevent success page from rendering
-  state.paymentFailed = true;
-  state.paymentConfirmed = false;
-  state.paymentPending = false;
+  setPaymentOutcome('failed');
   
   // CRITICAL: Clear order data to prevent success page from rendering
   // Don't set state.order - this prevents renderConfirmationView() from being called
@@ -23610,8 +23540,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
           // This ensures cart is populated when showStep(4) runs
           try {
-            const orderData = sessionStorage.getItem('boulders_checkout_order');
-            const customerData = sessionStorage.getItem('boulders_checkout_customer');
+            const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
+            const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
             
             if (orderData) {
               const storedOrder = JSON.parse(orderData);
@@ -23777,7 +23707,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           }
           
           // Reset payment failed state and navigate to step 4
-          state.paymentFailed = false;
+          setPaymentOutcome('none');
           // Clean up payment-failed-active class and inline styles before navigating
           const stepContent = document.querySelector('.step-content');
           if (stepContent) {
@@ -23847,10 +23777,9 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         supportOption.addEventListener('click', () => {
           console.log('[Payment Failed] User clicked "Get Help"');
           // Open support email
-          const supportEmail = 'medlem@boulders.dk';
           const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
           const body = encodeURIComponent(`Hello,\n\nHej, jeg kunne ikke gennemføre købet af ordrenr. #${displayOrderId}.\n\nKan i hjælpe med at løse det?\n\nMange tak!`);
-          window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+          window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
         });
       }
     }, 100);
@@ -23921,9 +23850,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
 
 function showPaymentPendingMessage(order, orderId) {
   // CRITICAL: Mark payment as pending to prevent success page from rendering
-  state.paymentPending = true;
-  state.paymentConfirmed = false;
-  state.paymentFailed = false;
+  setPaymentOutcome('pending');
   
   // CRITICAL: Ensure we're on step 5 (confirmation page) before modifying elements
   // If we're not on the confirmation page yet, navigate to it first
@@ -24018,7 +23945,7 @@ function showPaymentPendingMessage(order, orderId) {
     try {
       const updatedOrder = await orderAPI.getOrder(orderId);
       const isPaymentConfirmed = updatedOrder.leftToPay?.amount === 0 || updatedOrder.leftToPay === 0;
-      const isOrderPaid = updatedOrder.orderStatus?.name === 'Betalet' || updatedOrder.orderStatus?.id === 2;
+      const isOrderPaid = isOrderPaidStatus(updatedOrder);
       
       if (isPaymentConfirmed || isOrderPaid) {
         console.log('[Payment Pending] ✅ Payment confirmed! Reloading page to show success...');
@@ -24325,7 +24252,7 @@ function syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder) {
   let formattedDate = null;
   if (apiOrder?.createdAt || apiOrder?.created || apiOrder?.date) {
     const rawDate = apiOrder.createdAt || apiOrder.created || apiOrder.date;
-    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+    const langCode = getShortLanguageCode();
     const confirmationDateLocale = langCode === 'en' ? 'en-US' : langCode === 'de' ? 'de-DE' : 'da-DK';
     formattedDate = new Intl.DateTimeFormat(confirmationDateLocale, {
       year: 'numeric',
@@ -24606,7 +24533,6 @@ function renderConfirmationView() {
   const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
 
   if (freetrialActivationChangeCta && freetrialActivationChangeLink) {
-    const supportEmail = 'medlem@boulders.dk';
     const supportSubject = encodeURIComponent('Change of activation date - Free Trial');
     const supportBody = encodeURIComponent([
       'Hi Boulders team,',
@@ -24622,7 +24548,7 @@ function renderConfirmationView() {
       '',
       'Thanks in advance!'
     ].join('\n'));
-    freetrialActivationChangeLink.href = `mailto:${supportEmail}?subject=${supportSubject}&body=${supportBody}`;
+    freetrialActivationChangeLink.href = `mailto:${SUPPORT_EMAIL}?subject=${supportSubject}&body=${supportBody}`;
     freetrialActivationChangeLink.setAttribute('data-i18n-key', 'confirmation.freetrial.changeActivationCta');
     freetrialActivationChangeLink.textContent = t('confirmation.freetrial.changeActivationCta');
     freetrialActivationChangeCta.style.display = isFreeTrialFlow ? '' : 'none';
@@ -24691,7 +24617,7 @@ function renderConfirmationView() {
   
   const { orderNumber, orderDate, orderTotal, memberName, memberPhone, membershipType } = DOM.confirmationFields;
 
-  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const langCode = getShortLanguageCode();
   const confirmationDateLocale = langCode === 'en' ? 'en-US' : langCode === 'de' ? 'de-DE' : 'da-DK';
 
   // Order number - from API only
@@ -25493,7 +25419,7 @@ async function showDetailedReceipt() {
   if (businessUnit) {
     // Per BusinessUnitOut schema: companyNameForInvoice, address, company
     if (receiptSellerName) {
-      receiptSellerName.textContent = businessUnit.companyNameForInvoice || businessUnit.company?.name || businessUnit.name || 'Boulders ApS';
+      receiptSellerName.textContent = businessUnit.companyNameForInvoice || businessUnit.company?.name || businessUnit.name || RECEIPT_SELLER_FALLBACK.name;
     }
     
     if (receiptSellerAddress && businessUnit.address) {
@@ -25511,23 +25437,23 @@ async function showDetailedReceipt() {
     // CVR, Phone, Email might not be in BusinessUnitOut schema - check if available
     if (receiptSellerCVR) {
       // CVR might be in company object or business unit settings - not in schema, so use fallback
-      receiptSellerCVR.textContent = businessUnit.cvr || businessUnit.company?.cvr || '32777651'; // Fallback to known value
+      receiptSellerCVR.textContent = businessUnit.cvr || businessUnit.company?.cvr || RECEIPT_SELLER_FALLBACK.cvr;
     }
-    
+
     if (receiptSellerPhone) {
-      receiptSellerPhone.textContent = businessUnit.phone || businessUnit.contactPhone || '+45 72100019'; // Fallback
+      receiptSellerPhone.textContent = businessUnit.phone || businessUnit.contactPhone || RECEIPT_SELLER_FALLBACK.phone;
     }
-    
+
     if (receiptSellerEmail) {
-      receiptSellerEmail.textContent = businessUnit.email || businessUnit.contactEmail || 'medlem@boulders.dk'; // Fallback
+      receiptSellerEmail.textContent = businessUnit.email || businessUnit.contactEmail || RECEIPT_SELLER_FALLBACK.email;
     }
   } else {
     // Fallback to hardcoded values if business unit not available
-    if (receiptSellerName) receiptSellerName.textContent = 'Boulders ApS';
-    if (receiptSellerAddress) receiptSellerAddress.textContent = 'Graham Bells Vej 18A, 8200 Aarhus DK';
-    if (receiptSellerCVR) receiptSellerCVR.textContent = '32777651';
-    if (receiptSellerPhone) receiptSellerPhone.textContent = '+45 72100019';
-    if (receiptSellerEmail) receiptSellerEmail.textContent = 'medlem@boulders.dk';
+    if (receiptSellerName) receiptSellerName.textContent = RECEIPT_SELLER_FALLBACK.name;
+    if (receiptSellerAddress) receiptSellerAddress.textContent = RECEIPT_SELLER_FALLBACK.address;
+    if (receiptSellerCVR) receiptSellerCVR.textContent = RECEIPT_SELLER_FALLBACK.cvr;
+    if (receiptSellerPhone) receiptSellerPhone.textContent = RECEIPT_SELLER_FALLBACK.phone;
+    if (receiptSellerEmail) receiptSellerEmail.textContent = RECEIPT_SELLER_FALLBACK.email;
   }
   
   // Populate purchased items — all product types under one "Product details" heading
@@ -26184,9 +26110,7 @@ function nextStep(fromStep) {
         state.testProductType = productType;
         state.testFitnessMembership = isFitness;
         state.testSingleGymMembership = isSingleGym;
-        state.paymentConfirmed = true; // Set payment confirmed for test mode
-        state.paymentFailed = false;
-        state.paymentPending = false;
+        setPaymentOutcome('confirmed'); // test mode
         
         // Set product type for test mode
         if (productType === 'punch-card') {
@@ -26419,7 +26343,7 @@ function showStep(stepNumber) {
       // CRITICAL: Restore selectedBusinessUnit from sessionStorage if missing
       if (!state.selectedBusinessUnit) {
         try {
-          const orderData = sessionStorage.getItem('boulders_checkout_order');
+          const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
           if (orderData) {
             const storedOrder = JSON.parse(orderData);
             if (storedOrder.selectedBusinessUnit) {
@@ -26466,7 +26390,7 @@ function showStep(stepNumber) {
       const needsRestore = (!state.cartItems || state.cartItems.length === 0) && state.orderId;
       if (needsRestore) {
         try {
-          const orderData = sessionStorage.getItem('boulders_checkout_order');
+          const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
           if (orderData) {
             const storedOrder = JSON.parse(orderData);
             if (storedOrder.cartItems) {
@@ -27271,14 +27195,78 @@ function findAddon(id) {
     const addon = state.subscriptionAdditions.find((addon) => String(addon.id) === String(id));
     if (addon) return addon;
   }
-  
+
   // Then check boost products
   if (Array.isArray(state.boostProducts)) {
     const boostProduct = state.boostProducts.find((product) => String(product.id) === String(id));
     if (boostProduct) return boostProduct;
   }
-  
+
   return null;
+}
+
+/**
+ * An addon is added to the order as either a value card or an article, and BRP
+ * has no single authoritative field for the distinction, so every available
+ * signal is checked. The signal breakdown is logged here so checkout logging
+ * can show why a call was routed the way it was.
+ */
+function detectValueCardAddon(addonId) {
+  const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+  const addon = findAddon(addonId);
+
+  // Primary: the product id appears in the value-card catalogs (regular and
+  // campaign cards both come from the dedicated valuecards endpoint).
+  const allValueCards = [
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || []),
+  ];
+  const isInValueCards = allValueCards.some(vc => {
+    const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+    return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+  });
+
+  // Also check allRawProducts (includes value cards before filtering)
+  const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+    const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+    return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
+           (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' ||
+            // Check if it came from valueCards endpoint by checking if it's not a subscription
+            (!p.priceWithInterval && !p.subscriptionInterval));
+  });
+
+  // Secondary method: Check productType field if available
+  const hasValueCardType = addon && (
+    addon.productType === 'VALUE_CARD' ||
+    addon.productType === 'VALUECARD' ||
+    (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
+  );
+
+  // Tertiary method: Check if it's from valueCards API endpoint (has value card specific fields)
+  const hasValueCardFields = addon && (
+    addon.valueCardType !== undefined ||
+    addon.validUntil !== undefined ||
+    (addon.product && addon.product.valueCardType !== undefined)
+  );
+
+  const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+
+  // Guarded so the payload (object + map) is only built when debugging.
+  if (debugEnabled) devLog(`[checkout] Addon ${addonId} type detection:`, {
+    addonId,
+    numericId,
+    isInValueCards,
+    isInRawValueCards,
+    hasValueCardType,
+    hasValueCardFields,
+    productType: addon?.productType || addon?.product?.productType,
+    isValueCard,
+    valueCardsCount: state.valueCards?.length || 0,
+    valueCardIds: state.valueCards?.map(vc => vc.id) || [],
+    allRawProductsCount: state.allRawProducts?.length || 0,
+  });
+
+  return { addon, numericId, isValueCard };
 }
 
 // Extract price from addon (handles both subscription additions and boost products)
@@ -27669,14 +27657,14 @@ function restoreConsentCheckboxes() {
     // Restore privacy consent - use cached DOM element if available, otherwise query
     const privacyConsent = DOM.privacyConsent || document.getElementById('privacyConsent');
     if (privacyConsent) {
-      const savedPrivacyConsent = localStorage.getItem('boulders_privacy_consent');
+      const savedPrivacyConsent = localStorage.getItem(PRIVACY_CONSENT_STORAGE_KEY);
       if (savedPrivacyConsent === 'true') {
         privacyConsent.checked = true;
         // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
         // This handles edge cases where localStorage was partially cleared
-        if (!localStorage.getItem('boulders_privacy_consent_timestamp')) {
+        if (!localStorage.getItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY)) {
           const timestamp = new Date().toISOString();
-          localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+          localStorage.setItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
           console.log('[Privacy Consent] Restored from localStorage, created new timestamp:', timestamp);
         } else {
           console.log('[Privacy Consent] Restored from localStorage with existing timestamp');
@@ -27689,14 +27677,14 @@ function restoreConsentCheckboxes() {
     // Restore terms consent - use cached DOM element if available, otherwise query
     const termsConsent = DOM.termsConsent || document.getElementById('termsConsent');
     if (termsConsent) {
-      const savedTermsConsent = localStorage.getItem('boulders_terms_consent');
+      const savedTermsConsent = localStorage.getItem(TERMS_CONSENT_STORAGE_KEY);
       if (savedTermsConsent === 'true') {
         termsConsent.checked = true;
         // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
         // This handles edge cases where localStorage was partially cleared
-        if (!localStorage.getItem('boulders_terms_consent_timestamp')) {
+        if (!localStorage.getItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY)) {
           const timestamp = new Date().toISOString();
-          localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+          localStorage.setItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
           console.log('[Terms Consent] Restored from localStorage, created new timestamp:', timestamp);
         } else {
           console.log('[Terms Consent] Restored from localStorage with existing timestamp');

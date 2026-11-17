@@ -32,9 +32,8 @@ What actually runs in production:
 - `index.html` — the entry point Vite builds. Contains Cookiebot, Google Consent Mode, GTM, and inline Sentry init bootstrap.
 - `app.js` — ~24k lines of vanilla JS. This is the real signup flow. It owns global `state`, route handling, all step rendering, BRP API calls, cart math, coupon/discount logic, payment-link generation, and the landing-page variants.
 - `styles.css` — ~10k lines of hand-written CSS (no Tailwind output despite `tailwind.config.js`).
-- `utils/*.js` — ES module helpers imported by `app.js` (`apiRequest.js`, `apiConfig.js`, `format.js`, `geo.js`, `geolocation.js`, `tokenStorage.js`, `input.js`, `validation.js`, `errors.js`, `toast.js`, `dom.js`, `string.js`, `date.js`, `locale.js`).
+- `utils/*.js` — ES module helpers imported by `app.js` (`apiRequest.js`, `apiConfig.js`, `format.js`, `geo.js`, `geolocation.js`, `tokenStorage.js`, `input.js`, `errors.js`, `toast.js`, `dom.js`, `date.js`, `locale.js`).
 - `sanitize.js`, `gtm-utils.js`, `postal-codes-dk.js` — additional root-level modules.
-- `sentry.config.js` — Sentry SDK config (Sentry itself is loaded from CDN in `index.html`).
 
 Landing routes live inside `app.js` in `LANDING_ROUTE_CONFIG`: `/freetrial`, `/membership-offer`, `/99kr` (firstclimb day-ticket). They are SPA routes handled by `app.js` — there is no router library.
 
@@ -44,8 +43,8 @@ Password reset is a separate early-return route, not a landing variant: `/reset-
 
 A parallel React app is being built but is not what users see in production yet:
 
-- `src/main.tsx`, `src/App.tsx` — minimal placeholder shell.
-- `app/App.tsx` — another React entry (overlap with `src/`).
+- `src/main.tsx` — React entry; mounts `app/App.tsx` (there is no `#root` element in `index.html`, so it never runs in production).
+- `app/App.tsx` — the React root component.
 - `features/signup/` — feature module with `components/`, `routes/`, `api/`, `schemas/`, `state/`. Uses React Hook Form + Zod + Zustand + React Query.
 - `shared/` — `ui/` (Button, Card, Input, Select, Stepper), `lib/` (http, tokens), `types/`, `constants/`, `styles/tokens.css`.
 
@@ -73,7 +72,7 @@ In production (Cloudflare Pages), `functions/api-proxy/index.ts` is the CORS-val
 - `vite.config.ts` resolves `base` from `VITE_BASE_PATH` or `GITHUB_REPOSITORY` (for GH Pages-style hosting), defaulting to `/`.
 - Sentry source-map upload runs only when `SENTRY_AUTH_TOKEN` is set at build time; `SENTRY_ORG`/`SENTRY_PROJECT`/`VITE_SENTRY_RELEASE` override defaults.
 - `sourcemap: true` is on for prod builds (uploaded then deleted from `dist/assets`).
-- `tsconfig.json` only includes `src` and `functions`; legacy `app.js` and `utils/*.js` are not type-checked.
+- `tsconfig.json` includes `src`, `app`, `features`, `shared` and `functions`; legacy `app.js` and `utils/*.js` are not type-checked.
 
 ## Conventions
 
