@@ -26234,6 +26234,14 @@ function resolveConfirmationPhone(customer, apiOrder) {
 }
 
 function renderSuccessAppDownloadSection(productType) {
+  // The app download card stays off the Black Week confirmation — the app has
+  // no surface for the campaign's punch/coffee cards. Toggled (not just set)
+  // so re-renders on the regular flows keep showing it.
+  const section = document.getElementById('successAppDownloadSection');
+  const isBlackWeekFlow = state.landingRouteConfig?.componentName === 'LandingBlackWeek';
+  if (section) section.hidden = isBlackWeekFlow;
+  if (isBlackWeekFlow) return;
+
   const iosLink = document.getElementById('downloadAppStoreBtn');
   const androidLink = document.getElementById('downloadGooglePlayBtn');
   const note = document.querySelector('.success-app-download-note');
