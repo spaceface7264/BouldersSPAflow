@@ -26755,39 +26755,69 @@ function createPurchaseItemElement() {
     // Use API valueCardItems data - aggregate if multiple cards
     const valueCardItems = apiOrder?.valueCardItems || [];
     const totalQuantity = valueCardItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
-    
-    if (punchCardType) {
-      // Show product name from first card, or indicate multiple types if different
-      // Remove card number from name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
-      if (valueCardItems.length > 0) {
-        let firstCardName = valueCardItems[0]?.product?.name || 'Klippekort';
-        // Remove card number in parentheses (e.g., " (400117054549)")
-        firstCardName = firstCardName.replace(/\s*\(\d+\)\s*$/, '');
-        
-        if (valueCardItems.length === 1) {
-          setConfirmationSummaryField(punchCardType, firstCardName, 'name');
-        } else {
-          setConfirmationSummaryField(punchCardType, `${firstCardName} (${valueCardItems.length} kort)`, 'name');
-        }
-      } else {
-        setConfirmationSummaryField(punchCardType, null, 'name');
+
+    // An order can hold different value-card products (Black Week: punch +
+    // coffee). Group items by product so each product gets its own line
+    // instead of the first one absorbing every card's count and price.
+    const cardAmountKr = (item) => {
+      if (!item?.price?.amount) return 0;
+      return (typeof item.price.amount === 'object' ? item.price.amount.amount : item.price.amount) / 100;
+    };
+    const cardGroups = [];
+    valueCardItems.forEach((item) => {
+      const key = String(item?.product?.id ?? item?.product?.name ?? 'card');
+      let group = cardGroups.find((g) => g.key === key);
+      if (!group) {
+        group = { key, items: [], count: 0, totalKr: 0 };
+        cardGroups.push(group);
       }
+      group.items.push(item);
+      group.count += item.quantity || 1;
+      group.totalKr += cardAmountKr(item);
+    });
+    const cardGroupName = (group) => {
+      // Remove card number in parentheses (e.g., " (400117054549)")
+      const name = (group.items[0]?.product?.name || 'Klippekort').replace(/\s*\(\d+\)\s*$/, '');
+      return group.count > 1 ? `${name} (${group.count} kort)` : name;
+    };
+
+    if (punchCardType) {
+      setConfirmationSummaryField(
+        punchCardType,
+        cardGroups.length > 0 ? cardGroupName(cardGroups[0]) : null,
+        'name',
+      );
     }
 
     const productLinePrice = document.querySelector('#confirmationOrderSection [data-summary-field="product-line-price"]');
-    if (productLinePrice && valueCardItems.length > 0) {
-      const itemTotal = valueCardItems.reduce((sum, item) => {
-        if (!item?.price?.amount) return sum;
-        const amount = typeof item.price.amount === 'object'
-          ? item.price.amount.amount / 100
-          : item.price.amount / 100;
-        return sum + amount;
-      }, 0);
+    if (productLinePrice && cardGroups.length > 0) {
       setConfirmationSummaryField(
         productLinePrice,
-        itemTotal > 0 ? formatCurrencyHalfKrone(roundToHalfKrone(itemTotal)) : null,
+        cardGroups[0].totalKr > 0 ? formatCurrencyHalfKrone(roundToHalfKrone(cardGroups[0].totalKr)) : null,
         'number',
       );
+    }
+
+    // One extra row per additional product. Re-render safe: previous extras
+    // are removed first (renderConfirmationView runs again on language switch).
+    const basePunchRow = punchCardType?.closest('.confirmation-order-product-row');
+    if (basePunchRow?.parentElement) {
+      basePunchRow.parentElement.querySelectorAll('[data-extra-card-row]').forEach((el) => el.remove());
+      let anchorRow = basePunchRow;
+      cardGroups.slice(1).forEach((group) => {
+        const row = document.createElement('div');
+        row.className = 'confirmation-order-product-row';
+        row.setAttribute('data-extra-card-row', '');
+        row.innerHTML = sanitizeHTML(
+          '<span class="confirmation-order-product-name"></span>' +
+          '<span class="confirmation-order-product-price-wrap"><span class="confirmation-order-product-price"></span></span>'
+        );
+        row.querySelector('.confirmation-order-product-name').textContent = cardGroupName(group);
+        row.querySelector('.confirmation-order-product-price').textContent =
+          group.totalKr > 0 ? formatCurrencyHalfKrone(roundToHalfKrone(group.totalKr)) : '—';
+        anchorRow.after(row);
+        anchorRow = row;
+      });
     }
 
     if (punchCardQuantity) {
