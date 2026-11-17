@@ -9482,6 +9482,7 @@ const translations = {
     'confirmation.eyebrow.15daypass': 'Dit prøvepas',
     'confirmation.eyebrow.punchcard': 'Dit klippekort',
     'confirmation.eyebrow.punchcard.multi': 'Dine kort',
+    'confirmation.summary.cardCount': '{count} kort',
     'confirmation.eyebrow.firstclimb': 'Din billet',
     'confirmation.perMonthShort': '/md.',
     'confirmation.totalToday': 'Total i dag',
@@ -9884,6 +9885,7 @@ const translations = {
     'confirmation.eyebrow.15daypass': 'Your trial pass',
     'confirmation.eyebrow.punchcard': 'Your punch card',
     'confirmation.eyebrow.punchcard.multi': 'Your cards',
+    'confirmation.summary.cardCount': '{count} cards',
     'confirmation.eyebrow.firstclimb': 'Your ticket',
     'confirmation.perMonthShort': '/mo.',
     'confirmation.totalToday': 'Total today',
@@ -10346,6 +10348,7 @@ const translations = {
     'confirmation.eyebrow.15daypass': 'Dein Testpass',
     'confirmation.eyebrow.punchcard': 'Deine Stempelkarte',
     'confirmation.eyebrow.punchcard.multi': 'Deine Karten',
+    'confirmation.summary.cardCount': '{count} Karten',
     'confirmation.eyebrow.firstclimb': 'Dein Ticket',
     'confirmation.perMonthShort': '/Mon.',
     'confirmation.totalToday': 'Heute gesamt',
@@ -26062,7 +26065,19 @@ function syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder) {
       || document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-type"]')?.textContent?.trim()
       || null;
   } else if (productType === 'punch-card') {
-    productName = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]')?.textContent?.trim() || null;
+    // A mixed basket (Black Week: punch + coffee) can't be represented by the
+    // first product's name next to the whole order's total — label it with
+    // the card count instead.
+    const cardItems = apiOrder?.valueCardItems || [];
+    const distinctCardProducts = new Set(
+      cardItems.map((item) => String(item?.product?.id ?? item?.product?.name ?? 'card'))
+    );
+    if (distinctCardProducts.size > 1) {
+      const cardCount = cardItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+      productName = t('confirmation.summary.cardCount').replace('{count}', String(cardCount));
+    } else {
+      productName = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]')?.textContent?.trim() || null;
+    }
   }
 
   let totalLabel = document.querySelector('#confirmationOrderSection [data-summary-field="order-total"]')?.textContent?.trim() || null;
