@@ -6057,11 +6057,19 @@ function handleBlackWeekUpsellAdd() {
   hideBlackWeekUpsellModal();
   if (!missing || !addMissingBlackWeekProduct(missing)) return;
   syncBlackWeekQuantityUI();
+  // The added card's section may be below the fold (that's why the upsell
+  // exists) — bring it into view so the guest sees what landed in the cart.
+  const section = missing === 'coffee'
+    ? document.querySelector('.bw-title--coffee')
+    : document.querySelector('.bw-title');
+  section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function handleBlackWeekUpsellSkip() {
   hideBlackWeekUpsellModal();
-  nextStep();
+  // Re-enter the continue flow (the shown flag prevents a second prompt) so
+  // skipping still gets the review reset and begin_checkout tracking.
+  handleBlackWeekContinue();
 }
 
 function handleBlackWeekReviewBack() {
@@ -6093,6 +6101,29 @@ function handleBlackWeekContinue() {
     showToast(t('blackweek.selectRequired') || 'Select a punch card and/or a coffee card to continue.', 'error');
     return;
   }
+
+  // The coffee section sits below the fold, so a punch-only cart gets one
+  // chance (per page load) to add the other half of the campaign before
+  // checkout — and the mirror case for coffee-only carts. Declining
+  // continues via the skip handler, which re-enters this function.
+  if (!state.blackWeekUpsellShown) {
+    const caps = getBlackWeekRemainingCaps();
+    let missing = null;
+    if (punchQty > 0 && coffeeQty === 0 && caps.coffee > 0 && getBlackWeekCoffeeProducts()[0]) {
+      missing = 'coffee';
+    } else if (
+      coffeeQty > 0 && punchQty === 0 && caps.punch > 0 &&
+      getBlackWeekPunchSegments(state.blackWeekProducts).some((segment) => segment.product)
+    ) {
+      missing = 'punch';
+    }
+    if (missing) {
+      state.blackWeekUpsellShown = true;
+      showBlackWeekUpsellModal(missing);
+      return;
+    }
+  }
+
   state.blackWeekReview = false;
 
   // "Til kassen" is where this flow's checkout begins. The pay button's generic
