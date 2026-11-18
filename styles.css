@@ -283,6 +283,27 @@
     gap: 6px;
     flex-shrink: 0;
   }
+  /* Black Week coffee upsell: compact stepper on the modal's dark glass sheet */
+  .addon-card .boost-qty-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+  }
+  .addon-card .boost-qty-controls .quantity-btn {
+    width: 32px;
+    height: 36px;
+    border-color: rgba(255, 255, 255, 0.4);
+    color: var(--color-text-secondary);
+  }
+  .addon-card .boost-qty-controls .quantity-btn:hover:not(:disabled) {
+    border-color: var(--color-brand-accent);
+    color: var(--color-brand-accent);
+  }
+  .addon-card .boost-qty-controls .boost-qty-value {
+    min-width: 20px;
+    color: var(--color-text-secondary);
+  }
   .addon-card .addon-card-price {
     text-align: right;
     display: flex;

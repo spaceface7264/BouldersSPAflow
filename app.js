@@ -1524,6 +1524,10 @@ async function advanceFirstClimbFromGym() {
   try { updateCartSummary(); } catch (_) {}
   scrollToTop();
   setTimeout(() => scrollToTop(), 200);
+
+  // Black Week: offer the coffee upsell on top of the form step.
+  // Continue/skip both re-assert step 4, leaving the firstclimb card intact.
+  maybeShowBlackWeekBoostUpsell();
 }
 
 // Deeplink straight into the cart with Aalborg and one membership already chosen.
@@ -5535,6 +5539,9 @@ function ensureBlackWeekDefaultSelection(products) {
   state.subscriptionAdditions = [];
   state.selectedAddonIds = [];
   if (state.addonIds?.size) state.addonIds.clear();
+  // Drop any boost-modal coffee quantities picked in the signup flow, so
+  // crossing to /black-week never carries ghost upsell lines.
+  state.boostCoffeeQtys = {};
   // A cart restored after a failed payment that came in before the products did.
   takeRestoredBlackWeekCart();
   applyBlackWeekSelectionToCartState();
@@ -7652,6 +7659,7 @@ const state = {
   membershipPlanId: null,
   valueCardQuantities: new Map(),
   addonIds: new Set(),
+  boostCoffeeQtys: {}, // Black Week boost modal: coffee card quantities keyed by product id (separate from blackWeekCoffeeQtys so the /black-week cart branch never fires)
   totals: {
     cartTotal: 0,
     membershipMonthly: 0,
@@ -8400,28 +8408,38 @@ function populateBoostModal() {
     }
   }
   
+  // Black Week mode: the modal is a coffee-card upsell with its own copy,
+  // pricing (-50% vs was-price) and a quantity stepper capped at 5.
+  const bwMode = !BOOST_MODAL_ENABLED && isBlackWeekBoostUpsellActive();
+
   // Update title for boost modal
   if (title) {
-    title.textContent = t('addons.modal.boost.title');
+    title.textContent = bwMode ? t('blackweek.boost.title') : t('addons.modal.boost.title');
   }
-  
+  const hintEl = addonsModal.querySelector('.addons-hint');
+  if (hintEl) {
+    hintEl.textContent = bwMode ? t('blackweek.boost.hint') : t('addons.modal.hint');
+  }
+
   grid.innerHTML = '';
-  
+
   // Use products with "boostProduct" label.
   // If duplicate products share the same display name (e.g. two "Kaffekort"),
-  // keep only the cheapest one.
-  const boostProducts = state.boostProducts || [];
+  // keep only the cheapest one. Black Week renders every coffee card as-is.
+  const boostProducts = bwMode ? getBlackWeekCoffeeProducts() : (state.boostProducts || []);
   const boostProductsByName = new Map();
-  boostProducts.forEach((product) => {
-    const displayName = (product?.name || '').trim();
-    const key = displayName.toLowerCase();
-    if (!key) return;
-    const price = roundToHalfKrone(getAddonPrice(product));
-    const existing = boostProductsByName.get(key);
-    if (!existing || price < existing.price) {
-      boostProductsByName.set(key, { product, price });
-    }
-  });
+  if (!bwMode) {
+    boostProducts.forEach((product) => {
+      const displayName = (product?.name || '').trim();
+      const key = displayName.toLowerCase();
+      if (!key) return;
+      const price = roundToHalfKrone(getAddonPrice(product));
+      const existing = boostProductsByName.get(key);
+      if (!existing || price < existing.price) {
+        boostProductsByName.set(key, { product, price });
+      }
+    });
+  }
   const boostProductsToRender = boostProductsByName.size > 0
     ? Array.from(boostProductsByName.values()).map((entry) => entry.product)
     : boostProducts;
@@ -8584,7 +8602,10 @@ function populateBoostModal() {
       }
       
       // Display media banner text above price (used as original-price fallback too).
-      const productBannerText = getAddonMediaBannerText(product);
+      // Black Week shows the -50% pill instead (same as the landing picker).
+      const productBannerText = bwMode
+        ? (getBlackWeekWasPriceKr(product) > getBlackWeekPriceKr(product) ? '-50%' : '')
+        : getAddonMediaBannerText(product);
       if (priceBannerEl && productBannerText) {
         priceBannerEl.textContent = productBannerText;
         priceBannerEl.style.display = '';
@@ -8620,9 +8641,15 @@ function populateBoostModal() {
     });
     
     if (originalPriceEl) {
-      originalPriceEl.style.display = 'none';
+      const bwWasPrice = bwMode ? getBlackWeekWasPriceKr(product) : 0;
+      if (bwMode && bwWasPrice > price) {
+        originalPriceEl.textContent = formatPriceHalfKrone(bwWasPrice);
+        originalPriceEl.style.display = '';
+      } else {
+        originalPriceEl.style.display = 'none';
+      }
     }
-    
+
     if (discountedPriceEl) {
       // Always show price, including "0 kr" for free items
       discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(price));
@@ -8687,7 +8714,71 @@ function populateBoostModal() {
         card.classList.add('selected');
       }
     }
-    
+
+    // Black Week: quantity stepper (0..cap) next to the add-to-cart button.
+    if (bwMode && addToCartBtn) {
+      const actionsRow = card.querySelector('.addon-card-actions-row');
+      if (actionsRow) {
+        const qtyWrap = document.createElement('div');
+        qtyWrap.className = 'quantity-controls boost-qty-controls';
+        const minusBtn = document.createElement('button');
+        minusBtn.type = 'button';
+        minusBtn.className = 'quantity-btn';
+        minusBtn.textContent = '−';
+        minusBtn.setAttribute('aria-label', t('blackweek.boost.decrease') || 'Decrease quantity');
+        const valueEl = document.createElement('span');
+        valueEl.className = 'quantity-value boost-qty-value';
+        const plusBtn = document.createElement('button');
+        plusBtn.type = 'button';
+        plusBtn.className = 'quantity-btn';
+        plusBtn.textContent = '+';
+        plusBtn.setAttribute('aria-label', t('blackweek.boost.increase') || 'Increase quantity');
+        qtyWrap.appendChild(minusBtn);
+        qtyWrap.appendChild(valueEl);
+        qtyWrap.appendChild(plusBtn);
+        actionsRow.appendChild(qtyWrap);
+
+        const refreshQtyUI = () => {
+          const qty = getBoostCoffeeQty(product.id);
+          const isSelected = qty > 0;
+          valueEl.textContent = String(qty);
+          minusBtn.disabled = qty <= 0;
+          plusBtn.disabled = qty >= getBoostCoffeeQtyCap();
+          card.classList.toggle('selected', isSelected);
+          addToCartBtn.textContent = isSelected ? t('button.added') : t('button.addToCart');
+          addToCartBtn.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
+        };
+        // toggleAddon() refreshes the stepper through this hook after button/card toggles.
+        card._bwRefreshQty = refreshQtyUI;
+
+        qtyWrap.addEventListener('click', (e) => e.stopPropagation());
+        minusBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setBoostCoffeeQty(product.id, getBoostCoffeeQty(product.id) - 1);
+          refreshQtyUI();
+          updateCartSummary();
+          updateAddonActionButton();
+          updateCheckoutButton();
+        });
+        plusBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const current = getBoostCoffeeQty(product.id);
+          if (current >= getBoostCoffeeQtyCap()) {
+            showToast(t('blackweek.cap.coffeeExhausted'), 'info');
+            return;
+          }
+          setBoostCoffeeQty(product.id, current + 1);
+          refreshQtyUI();
+          updateCartSummary();
+          updateAddonActionButton();
+          updateCheckoutButton();
+        });
+        refreshQtyUI();
+      }
+    }
+
     // Main row click toggles add to cart (expand button and thumbnail have their own handlers)
     card.style.cursor = 'pointer';
     const mainRow = card.querySelector('.addon-card-main');
@@ -8716,17 +8807,82 @@ const BOOST_MODAL_OPEN_DELAY_MS = 50;
 // Temporary kill switch. Set to true to offer the boost upsell modal again.
 const BOOST_MODAL_ENABLED = false;
 
+const BLACK_WEEK_BOOST_PROMPTED_KEY = 'boulders_bw_boost_prompted';
+
+// Black Week repurposes the boost modal as a coffee-card upsell, independent of
+// the label-based boost flow (which stays behind BOOST_MODAL_ENABLED).
+function isBlackWeekBoostUpsellActive() {
+  return isBlackWeekWindowOpen()
+    && !isBlackWeekRoute()
+    && getBlackWeekCoffeeProducts().length > 0
+    && getBlackWeekRemainingCaps().coffee > 0;
+}
+
+function getBoostCoffeeQty(productId) {
+  const id = getProductNumericId(productId);
+  if (id == null) return 0;
+  const map = state.boostCoffeeQtys;
+  if (!map || typeof map !== 'object' || Array.isArray(map)) {
+    state.boostCoffeeQtys = {};
+    return 0;
+  }
+  return Math.max(0, Number(map[String(id)]) || 0);
+}
+
+function getBoostCoffeeQtyCap() {
+  return Math.min(BLACK_WEEK_COFFEE_CAP, getBlackWeekRemainingCaps().coffee);
+}
+
+// Clamps to 0..cap and keeps state.addonIds in sync (qty >= 1 ⇔ selected).
+function setBoostCoffeeQty(productId, qty) {
+  const id = getProductNumericId(productId);
+  if (id == null) return 0;
+  if (!state.boostCoffeeQtys || typeof state.boostCoffeeQtys !== 'object' || Array.isArray(state.boostCoffeeQtys)) {
+    state.boostCoffeeQtys = {};
+  }
+  const next = Math.max(0, Math.min(getBoostCoffeeQtyCap(), Math.floor(Number(qty) || 0)));
+  if (next <= 0) {
+    delete state.boostCoffeeQtys[String(id)];
+    state.addonIds.delete(id);
+    state.addonIds.delete(String(id));
+  } else {
+    state.boostCoffeeQtys[String(id)] = next;
+    if (!state.addonIds.has(id) && !state.addonIds.has(String(id))) {
+      state.addonIds.add(id);
+    }
+  }
+  return next;
+}
+
+// Returns true when the Black Week coffee upsell modal was opened (caller then
+// skips its own auto-advance; the modal's continue/skip drives the flow).
+function maybeShowBlackWeekBoostUpsell() {
+  if (!isBlackWeekBoostUpsellActive()) return false;
+  try {
+    if (sessionStorage.getItem(BLACK_WEEK_BOOST_PROMPTED_KEY) === '1') return false;
+    sessionStorage.setItem(BLACK_WEEK_BOOST_PROMPTED_KEY, '1');
+  } catch (_) {
+    // sessionStorage unavailable: still show, just without the once-per-session guard
+  }
+  state.boostProducts = getBlackWeekCoffeeProducts();
+  setTimeout(() => {
+    showBoostModal({ productsPreloaded: true });
+  }, BOOST_MODAL_OPEN_DELAY_MS);
+  return true;
+}
+
 // Show boost modal (uses same modal infrastructure as addons)
 async function showBoostModal(options = {}) {
-  if (!BOOST_MODAL_ENABLED) return;
+  if (!BOOST_MODAL_ENABLED && !isBlackWeekBoostUpsellActive()) return;
   ensureAddonsModal();
   
   // Ensure products are loaded first
-  const hasAnyProducts = (state.allRawProducts?.length || 0) > 0 || 
-                         (state.subscriptions?.length || 0) > 0 || 
+  const hasAnyProducts = (state.allRawProducts?.length || 0) > 0 ||
+                         (state.subscriptions?.length || 0) > 0 ||
                          (state.campaignSubscriptions?.length || 0) > 0 ||
                          (state.dayPassSubscriptions?.length || 0) > 0 ||
-                         (state.valueCards?.length || 0) > 0;
+                         (state.valueCards?.length || 0) > 0 ||
+                         (state.blackWeekProducts?.length || 0) > 0;
   
   if (!hasAnyProducts) {
     console.warn('[Boost Modal] No products loaded yet. Waiting for products to load...');
@@ -8741,7 +8897,8 @@ async function showBoostModal(options = {}) {
   }
   
   // If products were already loaded for the current selection, skip duplicate reload.
-  if (!options.productsPreloaded) {
+  // Black Week mode sources coffee products directly; no label-based load needed.
+  if (!options.productsPreloaded && !isBlackWeekBoostUpsellActive()) {
     await loadBoostProducts(resolveSelectedAccessProduct());
   }
   
@@ -8784,7 +8941,11 @@ async function showBoostModal(options = {}) {
 }
 
 function prewarmBoostModalResources() {
-  if (!BOOST_MODAL_ENABLED) return;
+  if (!BOOST_MODAL_ENABLED) {
+    // Black Week coffee upsell only needs the modal DOM; products are already loaded.
+    if (isBlackWeekBoostUpsellActive()) ensureAddonsModal();
+    return;
+  }
   // Precreate modal DOM upfront to avoid first-open construction cost.
   ensureAddonsModal();
 
@@ -9398,6 +9559,10 @@ const translations = {
     'blackweek.cap.coffeeExhausted': 'Du har nået grænsen for Black Week-kaffekort.',
     'blackweek.cap.clamped': 'Antallet blev reduceret til din resterende Black Week-grænse.',
     'blackweek.selectRequired': 'Vælg et klippekort og/eller kaffekort for at fortsætte.',
+    'blackweek.boost.title': 'Black Week: Kaffekort til halv pris',
+    'blackweek.boost.hint': 'Kun i Black Week: Tilføj kaffekort til din ordre og spar 50%. Maks 5 pr. person.',
+    'blackweek.boost.decrease': 'Færre kaffekort',
+    'blackweek.boost.increase': 'Flere kaffekort',
     'message.noProducts.blackweek': 'Ingen Black Week-produkter er tilgængelige lige nu.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'membership.limitedAccess': 'Begrænset adgang',
@@ -9802,6 +9967,10 @@ const translations = {
     'blackweek.cap.coffeeExhausted': 'Coffee card limit reached for this profile.',
     'blackweek.cap.clamped': 'Quantities were reduced to your remaining Black Week limit.',
     'blackweek.selectRequired': 'Select a punch card and/or coffee card to continue.',
+    'blackweek.boost.title': 'Black Week: Coffee card at half price',
+    'blackweek.boost.hint': 'Black Week only: Add coffee cards to your order and save 50%. Max 5 per person.',
+    'blackweek.boost.decrease': 'Fewer coffee cards',
+    'blackweek.boost.increase': 'More coffee cards',
     'message.noProducts.blackweek': 'No Black Week products available right now.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'membership.limitedAccess': 'Limited access',
@@ -16038,6 +16207,8 @@ async function handlePlanSelection(selectedCard) {
         showBoostModal({ productsPreloaded: true });
       }, BOOST_MODAL_OPEN_DELAY_MS);
     });
+  } else if (isMembership && maybeShowBlackWeekBoostUpsell()) {
+    // Black Week coffee upsell opened; its continue/skip drives the flow
   } else {
     // Auto-advance to next step after a short delay
     setTimeout(() => {
@@ -16398,6 +16569,10 @@ function setupNewAccessStep() {
                 showBoostModal({ productsPreloaded: true });
               }, BOOST_MODAL_OPEN_DELAY_MS);
             });
+          } else if (maybeShowBlackWeekBoostUpsell()) {
+            // Black Week coffee upsell opened; its continue/skip drives the flow
+            card.style.transform = 'scale(1)';
+            card.style.boxShadow = '';
           } else {
             // Clear any pending membership navigation timeout to prevent double-clicks
             if (pendingNavigationTimeouts.membership) {
@@ -16788,7 +16963,10 @@ function handleGlobalClick(event) {
       }
       closeActivationDateModal();
       if (state.currentStep === 2) {
-        nextStep();
+        // Black Week: offer the coffee upsell before advancing (freetrial/15daypass path)
+        if (!maybeShowBlackWeekBoostUpsell()) {
+          nextStep();
+        }
       } else {
         // Immediately reflect the newly selected date in UI
         updatePaymentOverview();
@@ -17643,16 +17821,32 @@ function toggleAddon(addonId, button) {
   }
 
   const card = button?.closest('.addon-card') || button?.closest('.plan-card');
+
+  // Black Week coffee upsell: selection and quantity move together (toggle = 0 ↔ 1+).
+  const bwCoffeeProduct = findBlackWeekCatalogProductById(addonId);
+  if (bwCoffeeProduct && isBlackWeekCoffeeProduct(bwCoffeeProduct)) {
+    const numericId = getProductNumericId(addonId);
+    if (!state.boostCoffeeQtys || typeof state.boostCoffeeQtys !== 'object' || Array.isArray(state.boostCoffeeQtys)) {
+      state.boostCoffeeQtys = {};
+    }
+    if (state.addonIds.has(addonId)) {
+      state.boostCoffeeQtys[String(numericId)] = Math.max(1, getBoostCoffeeQty(numericId));
+    } else {
+      delete state.boostCoffeeQtys[String(numericId)];
+    }
+    if (card && typeof card._bwRefreshQty === 'function') card._bwRefreshQty();
+  }
+
   if (card) {
     const isSelected = state.addonIds.has(addonId);
     card.classList.toggle('selected', isSelected);
-    
+
     // Update button text if it's a button
     if (button && button.tagName === 'BUTTON') {
       button.textContent = isSelected ? t('button.added') : t('button.addToCart');
       button.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
     }
-    
+
     centerPlanCard(card);
   }
 
@@ -17683,9 +17877,12 @@ function updateAddonActionButton() {
 
 function handleAddonAction() {
   const hasSelectedAddons = state.addonIds.size > 0;
-  
+
   if (hasSelectedAddons) {
     // If addons are selected, proceed directly
+    proceedAfterAddons();
+  } else if (!BOOST_MODAL_ENABLED && isBlackWeekBoostUpsellActive()) {
+    // Black Week coffee upsell: skipping needs no confirmation dialog
     proceedAfterAddons();
   } else {
     // If no addons selected, show confirmation dialog
@@ -18949,11 +19146,14 @@ function updateCartSummary() {
     const addon = findAddon(addonId);
     if (!addon) return;
     const price = getAddonPrice(addon);
+    // Black Week coffee upsell carries a quantity; other addons are always 1.
+    const qty = getBoostCoffeeQty(addonId) || 1;
     addonItems.push({
       id: addon.id,
-      name: addon.name || 'Add-on',
-      amount: roundToHalfKrone(price),
+      name: (addon.name || 'Add-on') + (qty > 1 ? ` ×${qty}` : ''),
+      amount: roundToHalfKrone(price * qty),
       type: 'addon',
+      quantity: qty,
       productId: addon.id, // Store API product ID for order creation
       description: addon.externalDescription || addon.description || addon.addition?.description || '',
     });
@@ -19077,11 +19277,14 @@ function updateCartTotals() {
     const addon = findAddon(addonId);
     if (!addon) return;
     const price = getAddonPrice(addon);
+    // Black Week coffee upsell carries a quantity; other addons are always 1.
+    const qty = getBoostCoffeeQty(addonId) || 1;
     addonItems.push({
       id: addon.id,
-      name: addon.name || 'Add-on',
-      amount: roundToHalfKrone(price),
+      name: (addon.name || 'Add-on') + (qty > 1 ? ` ×${qty}` : ''),
+      amount: roundToHalfKrone(price * qty),
       type: 'addon',
+      quantity: qty,
     });
   });
 
@@ -20764,7 +20967,8 @@ function updatePaymentOverview() {
         const addon = findAddon(addonId);
         if (addon) {
           const price = getAddonPrice(addon);
-          addonTotal += roundToHalfKrone(price);
+          const qty = getBoostCoffeeQty(addonId) || 1;
+          addonTotal += roundToHalfKrone(price * qty);
         }
       });
     }
@@ -20827,7 +21031,8 @@ function updatePaymentOverview() {
       const addon = findAddon(addonId);
       if (addon) {
         const price = getAddonPrice(addon);
-        addonTotalForLog += roundToHalfKrone(price);
+        const qty = getBoostCoffeeQty(addonId) || 1;
+        addonTotalForLog += roundToHalfKrone(price * qty);
       }
     });
   }
@@ -20890,7 +21095,8 @@ function updateDiscountDisplay() {
         const addon = findAddon(addonId);
         if (addon) {
           const price = getAddonPrice(addon);
-          items.push({ amount: price });
+          const qty = getBoostCoffeeQty(addonId) || 1;
+          items.push({ amount: price * qty });
         }
       });
       state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
@@ -22277,7 +22483,7 @@ async function handleCheckout() {
                   // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
                   let amountCents = getAddonPriceInCents(addon);
                   if (amountCents <= 0) {
-                    const allVc = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+                    const allVc = [...(state.valueCards || []), ...(state.campaignValueCards || []), ...(state.blackWeekProducts || [])];
                     const vcProduct = allVc.find(p => p.id === numericId || String(p.id) === String(addonId));
                     const priceObj = vcProduct?.price;
                     if (priceObj != null) {
@@ -22285,8 +22491,12 @@ async function handleCheckout() {
                     }
                     if (vcProduct?.amount != null) amountCents = Math.round(Number(vcProduct.amount));
                   }
-                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId}), amount: ${amountCents} cents`);
-                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents > 0 ? amountCents : null);
+                  // Black Week coffee upsell: one value-card item per piece (API takes qty 1)
+                  const addonQty = getBoostCoffeeQty(numericId) || 1;
+                  console.log(`[checkout] Adding addon ${addonId} as value card x${addonQty} (linked to subscription item ${validSubscriptionItemId}), amount: ${amountCents} cents`);
+                  for (let i = 0; i < addonQty; i++) {
+                    await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents > 0 ? amountCents : null);
+                  }
                 } else {
                   // Add as article with additionTo link
                   console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
@@ -22919,7 +23129,11 @@ async function handleCheckout() {
               const { numericId, isValueCard } = detectValueCardAddon(addonId);
 
               if (isValueCard) {
-                await orderAPI.addValueCardItem(state.orderId, numericId, 1, null);
+                // Black Week coffee upsell: one value-card item per piece (API takes qty 1)
+                const addonQty = getBoostCoffeeQty(numericId) || 1;
+                for (let i = 0; i < addonQty; i++) {
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, null);
+                }
               } else {
                 await orderAPI.addArticleItem(state.orderId, numericId, null);
               }
@@ -29263,6 +29477,7 @@ function detectValueCardAddon(addonId) {
   const allValueCards = [
     ...(state.valueCards || []),
     ...(state.campaignValueCards || []),
+    ...(state.blackWeekProducts || []),
   ];
   const isInValueCards = allValueCards.some(vc => {
     const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
