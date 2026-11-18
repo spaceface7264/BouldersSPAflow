@@ -283,6 +283,20 @@
     gap: 6px;
     flex-shrink: 0;
   }
+  /* Black Week coffee upsell: -50% badge next to the product title */
+  .addon-card .bw-boost-pill {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 7px;
+    background: var(--color-brand-accent);
+    color: #fff;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.4;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
   /* Black Week coffee upsell: compact stepper on the modal's dark glass sheet */
   .addon-card .boost-qty-controls {
     display: flex;

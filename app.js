@@ -8538,8 +8538,17 @@ function populateBoostModal() {
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
     
-    if (nameEl) nameEl.textContent = product.name || 'Boost Product';
-    
+    if (nameEl) {
+      nameEl.textContent = product.name || 'Boost Product';
+      // Black Week: -50% badge next to the title (instead of the price banner)
+      if (bwMode && getBlackWeekWasPriceKr(product) > getBlackWeekPriceKr(product)) {
+        const pill = document.createElement('span');
+        pill.className = 'bw-boost-pill';
+        pill.textContent = '-50%';
+        nameEl.appendChild(pill);
+      }
+    }
+
     // Extract and display product image
     if (imageEl) {
       let imageUrl = null;
@@ -8607,10 +8616,8 @@ function populateBoostModal() {
       }
       
       // Display media banner text above price (used as original-price fallback too).
-      // Black Week shows the -50% pill instead (same as the landing picker).
-      const productBannerText = bwMode
-        ? (getBlackWeekWasPriceKr(product) > getBlackWeekPriceKr(product) ? '-50%' : '')
-        : getAddonMediaBannerText(product);
+      // Black Week puts the -50% badge next to the title instead.
+      const productBannerText = bwMode ? '' : getAddonMediaBannerText(product);
       if (priceBannerEl && productBannerText) {
         priceBannerEl.textContent = productBannerText;
         priceBannerEl.style.display = '';
@@ -8648,7 +8655,7 @@ function populateBoostModal() {
     if (originalPriceEl) {
       const bwWasPrice = bwMode ? getBlackWeekWasPriceKr(product) : 0;
       if (bwMode && bwWasPrice > price) {
-        originalPriceEl.textContent = formatPriceHalfKrone(bwWasPrice);
+        originalPriceEl.textContent = formatPriceHalfKrone(bwWasPrice) + ' kr';
         originalPriceEl.style.display = '';
       } else {
         originalPriceEl.style.display = 'none';
