@@ -5014,6 +5014,9 @@ async function loadProductsFromAPI() {
       return true;
     });
     
+    // Snapshot before the landing-label filter: the Black Week pool (boost
+    // coffee upsell) must survive on label-filtered landing routes too.
+    const valueCardsBeforeLandingFilter = valueCards;
     if (requiredLandingLabels) {
       const beforeSubscriptionLandingFilter = subscriptions.length;
       const beforeValueCardLandingFilter = valueCards.length;
@@ -5074,8 +5077,10 @@ async function loadProductsFromAPI() {
       return true;
     });
     
-    // Black Week value cards are never shown in Campaign / Punch Card categories
-    const blackWeekValueCards = valueCards.filter((product) => isBlackWeekProduct(product));
+    // Black Week value cards are never shown in Campaign / Punch Card categories.
+    // Sourced from the pre-landing-filter list so the boost coffee upsell also
+    // works on label-filtered landing routes (/membership-offer, /freetrial, /99kr).
+    const blackWeekValueCards = valueCardsBeforeLandingFilter.filter((product) => isBlackWeekProduct(product));
 
     // Separate value cards: those with "PublicCampaign" go to Campaign category
     // Value cards with "PublicCampaign" should appear in Campaign, not in Punch Card category
