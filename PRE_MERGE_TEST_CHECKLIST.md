@@ -240,4 +240,18 @@ Sign-off: [ ] Ready to merge [ ] Needs fixes
 
 ---
 
-**Last Updated**: 2026-01-17
+## Black Week (23–29 Nov 2026, Europe/Copenhagen)
+
+Use `?forceBlackWeek=1` to open the window before/after the real dates; `?forceBlackWeek=0` to force closed.
+
+- [ ] `/black-week?forceBlackWeek=1` shows only Black Week products (830/831/832 + 833)
+- [ ] `/black-week` without force (outside window) redirects to `/`
+- [ ] Main catalog with `?forceBlackWeek=1` shows Black Week category; BW SKUs are not under Punch Card
+- [ ] Can add one punch SKU + coffee in the same cart and reach checkout
+- [ ] Punch qty cannot exceed remaining of 3 (owned + cart); coffee cannot exceed remaining of 5
+- [ ] After login, owned BW cards reduce remaining caps; checkout clamps if over
+- [ ] Normal punch-card flow still works for non-BW value cards
+
+---
+
+**Last Updated**: 2026-11-10
