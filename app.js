@@ -17825,32 +17825,39 @@ function selectMembershipPlan(planId) {
 
 function toggleAddon(addonId, button) {
   if (!addonId) return;
-  
-  if (state.addonIds.has(addonId)) {
+
+  const card = button?.closest('.addon-card') || button?.closest('.plan-card');
+
+  // Black Week coffee upsell: selection and quantity move together (toggle = 0 ↔ 1+).
+  // The id arrives as a number (card click, stepper) or string (delegated
+  // dataset handler) — normalize so the Set never holds both variants.
+  const bwCoffeeProduct = findBlackWeekCatalogProductById(addonId);
+  if (bwCoffeeProduct && isBlackWeekCoffeeProduct(bwCoffeeProduct)) {
+    const numericId = getProductNumericId(addonId);
+    const wasSelected = state.addonIds.has(numericId) || state.addonIds.has(String(numericId)) || state.addonIds.has(addonId);
+    state.addonIds.delete(numericId);
+    state.addonIds.delete(String(numericId));
+    state.addonIds.delete(addonId);
+    if (!state.boostCoffeeQtys || typeof state.boostCoffeeQtys !== 'object' || Array.isArray(state.boostCoffeeQtys)) {
+      state.boostCoffeeQtys = {};
+    }
+    if (wasSelected) {
+      delete state.boostCoffeeQtys[String(numericId)];
+    } else {
+      state.addonIds.add(numericId);
+      state.boostCoffeeQtys[String(numericId)] = Math.max(1, getBoostCoffeeQty(numericId));
+    }
+    if (card && typeof card._bwRefreshQty === 'function') card._bwRefreshQty();
+  } else if (state.addonIds.has(addonId)) {
     state.addonIds.delete(addonId);
   } else {
     state.addonIds.add(addonId);
   }
 
-  const card = button?.closest('.addon-card') || button?.closest('.plan-card');
-
-  // Black Week coffee upsell: selection and quantity move together (toggle = 0 ↔ 1+).
-  const bwCoffeeProduct = findBlackWeekCatalogProductById(addonId);
-  if (bwCoffeeProduct && isBlackWeekCoffeeProduct(bwCoffeeProduct)) {
-    const numericId = getProductNumericId(addonId);
-    if (!state.boostCoffeeQtys || typeof state.boostCoffeeQtys !== 'object' || Array.isArray(state.boostCoffeeQtys)) {
-      state.boostCoffeeQtys = {};
-    }
-    if (state.addonIds.has(addonId)) {
-      state.boostCoffeeQtys[String(numericId)] = Math.max(1, getBoostCoffeeQty(numericId));
-    } else {
-      delete state.boostCoffeeQtys[String(numericId)];
-    }
-    if (card && typeof card._bwRefreshQty === 'function') card._bwRefreshQty();
-  }
-
   if (card) {
-    const isSelected = state.addonIds.has(addonId);
+    const isSelected = bwCoffeeProduct && isBlackWeekCoffeeProduct(bwCoffeeProduct)
+      ? state.addonIds.has(getProductNumericId(addonId))
+      : state.addonIds.has(addonId);
     card.classList.toggle('selected', isSelected);
 
     // Update button text if it's a button
