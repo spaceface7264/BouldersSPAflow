@@ -3375,7 +3375,9 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
 .bw-upsell {
     position: fixed;
     inset: 0;
-    z-index: 80;
+    /* Above the fixed header (100) and countdown bar — this is a modal;
+       the site's overlay tier starts at 1000. */
+    z-index: 1200;
     background: rgba(10, 10, 14, 0.72);
     display: grid;
     place-items: center;

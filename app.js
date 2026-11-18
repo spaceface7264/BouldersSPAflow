@@ -832,6 +832,15 @@ function countOwnedBlackWeekCards(valueCards) {
 }
 
 function applyBlackWeekSelectionToCartState() {
+  // Projecting the Black Week maps rewrites shared cart state. Callers run on
+  // "campaign window open" (login, product reloads) regardless of route, so
+  // with no Black Week cart and no Black Week surface there is nothing to
+  // project — and proceeding would wipe a regular-flow cart mid-checkout.
+  const hasBlackWeekCart = blackWeekQtyTotal('punch') + blackWeekQtyTotal('coffee') > 0;
+  const onBlackWeekSurface =
+    isBlackWeekRoute() || document.body.classList.contains('blackweek-flow');
+  if (!hasBlackWeekCart && !onBlackWeekSurface) return;
+
   const caps = getBlackWeekRemainingCaps();
   const products = state.blackWeekProducts || [];
   const punches = products.filter((product) => isBlackWeekPunchProduct(product));
@@ -839,7 +848,14 @@ function applyBlackWeekSelectionToCartState() {
   clampBlackWeekQty('punch', caps.punch, punches);
   clampBlackWeekQty('coffee', caps.coffee, coffees);
 
-  state.valueCardQuantities.clear();
+  // Drop only this campaign's lines; a regular-flow punch card picked on the
+  // main catalog shares this map and must survive the rebuild.
+  const blackWeekLineKeys = new Set(
+    [...punches, ...coffees].map((product) => `punch-${getProductNumericId(product)}`)
+  );
+  [...state.valueCardQuantities.keys()].forEach((key) => {
+    if (blackWeekLineKeys.has(key)) state.valueCardQuantities.delete(key);
+  });
   let primaryPunch = null;
   punches.forEach((product) => {
     const id = getProductNumericId(product);
@@ -5249,7 +5265,17 @@ function startBlackWeekCountdown() {
     if (!isBlackWeekWindowOpen()) {
       stopBlackWeekCountdown();
       renderBlackWeekHeaderBar();
-      if (isBlackWeekRoute()) window.location.replace('/');
+      // Never yank a buyer who is past the picker: mid-checkout, on a payment
+      // return, or on the confirmation the redirect would lose the form or a
+      // paid order's receipt. They keep the page; sellability is gated anyway.
+      if (
+        isBlackWeekRoute() &&
+        !isPaymentReturnPage() &&
+        !state.checkoutInProgress &&
+        (Number(state.currentStep) || 1) < 4
+      ) {
+        window.location.replace('/');
+      }
       return;
     }
     const nodes = document.querySelectorAll('[data-bw-countdown]');
@@ -9031,8 +9057,12 @@ function init() {
     hideLoadingOverlay();
     return;
   }
-  // Outside the Black Week window, /black-week redirects to home (unless forceBlackWeek=1).
-  if (isBlackWeekRoute() && !isBlackWeekWindowOpen()) {
+  // Outside the Black Week window, /black-week redirects to home (unless
+  // forceBlackWeek=1). Payment returns are exempt: a buyer whose provider
+  // roundtrip crosses the window's end — or anyone reopening a receipt link
+  // later — must still reach the confirmation; replace('/') drops the query
+  // string and would strand a paid order.
+  if (isBlackWeekRoute() && !isBlackWeekWindowOpen() && !isPaymentReturnPage()) {
     window.location.replace('/');
     return;
   }
@@ -9076,7 +9106,7 @@ function init() {
   // Keep Black Week landing ↔ main catalog promo in sync with browser back/forward.
   window.addEventListener('popstate', () => {
     if (isPasswordResetRoute()) return;
-    if (isBlackWeekRoute() && !isBlackWeekWindowOpen()) {
+    if (isBlackWeekRoute() && !isBlackWeekWindowOpen() && !isPaymentReturnPage()) {
       window.location.replace('/');
       return;
     }
