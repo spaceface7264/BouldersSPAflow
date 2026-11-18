@@ -3775,6 +3775,20 @@ body.blackweek-flow .create-optional-consent {
     body.blackweek-flow #step-4 .form-group {
         margin-bottom: 14px;
     }
+
+    /* Put the auth-mode switch back in the card's top-right corner (the
+       generic mobile rule gives it its own row above the title) so
+       "NY PROFIL" and "Log ind" share one header row. */
+    body.blackweek-flow #step-4 .auth-mode-switch-btn {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        margin: 0;
+    }
+
+    body.blackweek-flow #step-4 .info-section-title {
+        margin-bottom: 16px;
+    }
 }
 
 /* —— Black Week cart ——
@@ -6490,6 +6504,20 @@ body.blackweek-flow .bw-cart-note {
 
 .form-group input::placeholder {
     color: #9CA3AF;
+}
+
+/* iOS/Chrome autofill paints its own light background over the dark inputs
+   (the white email/password fields) — pin the theme colors back. The inset
+   shadow covers the UA background; the long transition stalls Chrome's
+   repaint of it. */
+.form-group input:-webkit-autofill,
+.form-group input:-webkit-autofill:hover,
+.form-group input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #fff;
+    caret-color: #fff;
+    -webkit-box-shadow: 0 0 0 1000px #2a2a2a inset;
+    border-color: #374151;
+    transition: background-color 9999s ease-out;
 }
 
 /* Info Section Styles */
