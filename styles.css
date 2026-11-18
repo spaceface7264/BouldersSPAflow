@@ -3754,6 +3754,29 @@ body.blackweek-flow .create-optional-consent {
     display: none;
 }
 
+/* Black Week mobile: the shortened form keeps its paired rows (first/last
+   name, country code/phone) side by side and a tighter vertical rhythm —
+   the generic #step-4 mobile rules stack every row full-width. */
+@media (max-width: 480px) {
+    body.blackweek-flow #step-4 .form-row {
+        flex-direction: row;
+        gap: 10px;
+    }
+
+    body.blackweek-flow #step-4 .form-row .form-group {
+        min-width: 0;
+    }
+
+    body.blackweek-flow #step-4 .phone-country {
+        flex: 0 0 48%;
+        min-width: 0;
+    }
+
+    body.blackweek-flow #step-4 .form-group {
+        margin-bottom: 14px;
+    }
+}
+
 /* —— Black Week cart ——
    The cart on the Black Week checkout. It lists every Black Week card, in the
    cart or not: the picker's name and the line total, and under them the unit
