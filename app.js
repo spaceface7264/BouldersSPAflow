@@ -4810,8 +4810,10 @@ async function loadProductsFromAPI() {
         // Accept the firstclimb label itself as a visibility token so a BRP product
         // carrying only `firstclimb` (no Public/Secret/PublicCampaign) still passes.
         ? { allowedVisibilityLabels: ['firstclimb', 'secret', 'public', 'publiccampaign'] }
+        // No 'secret' here: the window is open on every route, and 'secret' is how
+        // landing-only products (e.g. the free trial) are kept off the main catalog.
         : isBlackWeekLandingRoute || blackWeekWindowOpen
-          ? { allowedVisibilityLabels: ['blackweekpunchcard', 'blackweekpunchcards', 'blackweekcoffee', 'secret', 'public', 'publiccampaign'] }
+          ? { allowedVisibilityLabels: ['blackweekpunchcard', 'blackweekpunchcards', 'blackweekcoffee', 'public', 'publiccampaign'] }
           : {};
 
   // Deduplicate concurrent calls (preload + step transition + showStep)
